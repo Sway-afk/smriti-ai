@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.memory import Memory
-from app.schemas.memory import MemoryCreate, MemoryResponse
+from app.schemas.memory import MemoryCreate, MemoryUpdate, MemoryResponse
 
 
 router = APIRouter(
@@ -74,3 +74,35 @@ def delete_memory(memory_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Memory deleted successfully"}
+
+@router.put("/{memory_id}", response_model=MemoryResponse)
+def update_memory(
+    memory_id: int,
+    memory_update: MemoryUpdate,
+    db: Session = Depends(get_db)
+):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id)
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found"
+        )
+
+    if memory_update.title is not None:
+        memory.title = memory_update.title
+
+    if memory_update.content is not None:
+        memory.content = memory_update.content
+
+    if memory_update.category is not None:
+        memory.category = memory_update.category
+
+    db.commit()
+    db.refresh(memory)
+
+    return memory

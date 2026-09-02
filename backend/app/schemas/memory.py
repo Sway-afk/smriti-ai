@@ -9,6 +9,11 @@ class MemoryCreate(BaseModel):
     content: str
     category: str | None = None
 
+class MemoryUpdate(BaseModel):
+    title: str | None = None
+    content: str | None = None
+    category: str | None = None
+
 
 class MemoryResponse(BaseModel):
     id: int
