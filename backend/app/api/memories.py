@@ -29,14 +29,27 @@ def create_memory(memory: MemoryCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[MemoryResponse])
-def get_memories(patient_id: int, db: Session = Depends(get_db)):
-    memories = (
-        db.query(Memory)
-        .filter(Memory.patient_id == patient_id)
-        .all()
-    )
+def get_memories(
+    patient_id: int,
+    category: str | None = None,
+    search: str | None = None,
+    skip: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Memory).filter(Memory.patient_id == patient_id)
 
-    return memories
+    if category is not None:
+        query = query.filter(Memory.category == category)
+
+    if search is not None:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            (Memory.title.ilike(search_pattern)) |
+            (Memory.content.ilike(search_pattern))
+        )
+
+    return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{memory_id}", response_model=MemoryResponse)
