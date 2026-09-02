@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+smriti.db
+check_db.py
+.env
