@@ -6,6 +6,7 @@ from app.database.base import Base
 from app.models.memory import Memory
 from app.models.game_attempt import GameAttempt
 from app.models.patients import Patient
+from app.models.generated_game import GeneratedGame
 from app.api.memories import router as memories_router
 from app.api.patients import router as patient_router
 

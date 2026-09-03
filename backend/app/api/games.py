@@ -1,10 +1,13 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.memory import Memory
 from app.models.game_attempt import GameAttempt
+from app.models.generated_game import GeneratedGame
 from app.services.game_generator import generate_game_from_memory
+from app.services.ai_game_generator import generate_ai_game
 from app.schemas.game import GameResponse, GameAnswer, GameForPlayer, GameAnswerRequest
 
 
@@ -18,6 +21,7 @@ router = APIRouter(
 def generate_game(
     memory_id: int,
     difficulty: str = "easy",
+    language: str = "English",
     db: Session = Depends(get_db)
 ):
     memory = (
@@ -36,52 +40,63 @@ def generate_game(
         "id": memory.id,
         "title": memory.title,
         "content": memory.content,
-        "difficulty": difficulty
+        "difficulty": difficulty,
+        "language": language
     }
 
-    game = generate_game_from_memory(memory_data)
+    game = generate_ai_game(memory_data)
 
-    game.pop("answer", None)
+    generated_game = GeneratedGame(
+        memory_id=memory.id,
+        game_type=game["game_type"],
+        question=game["question"],
+        options=json.dumps(game["options"]),
+        answer=game["answer"],
+        difficulty=game["difficulty"],
+        language=language
+    )
 
-    return game
+    db.add(generated_game)
+    db.commit()
+    db.refresh(generated_game)
+
+    return {
+    "game_id": generated_game.id,
+    "game_type": generated_game.game_type,
+    "memory_id": generated_game.memory_id,
+    "question": generated_game.question,
+    "options": json.loads(generated_game.options),
+    "difficulty": generated_game.difficulty
+}
 
 @router.post("/check-answer")
 def check_answer(
     request: GameAnswerRequest,
     db: Session = Depends(get_db)
 ):
-    memory = (
-        db.query(Memory)
-        .filter(Memory.id == request.memory_id)
+    generated_game = (
+        db.query(GeneratedGame)
+        .filter(GeneratedGame.id == request.game_id)
         .first()
     )
 
-    if memory is None:
+    if generated_game is None:
         raise HTTPException(
             status_code=404,
-            detail="Memory not found"
+            detail="Generated game not found"
         )
-
-    memory_data = {
-        "id": memory.id,
-        "title": memory.title,
-        "content": memory.content,
-        "difficulty": "easy"
-    }
-
-    game = generate_game_from_memory(memory_data)
 
     correct = (
         request.answer.strip().lower()
-        == game["answer"].strip().lower()
+        == generated_game.answer.strip().lower()
     )
 
     score = 1 if correct else 0
 
     attempt = GameAttempt(
-        memory_id=memory.id,
-        game_type=game["game_type"],
-        difficulty=game["difficulty"],
+        memory_id=generated_game.memory_id,
+        game_type=generated_game.game_type,
+        difficulty=generated_game.difficulty,
         user_answer=request.answer,
         correct=correct,
         score=score

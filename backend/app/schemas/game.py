@@ -13,6 +13,7 @@ class GameAnswer(BaseModel):
     answer: str
 
 class GameForPlayer(BaseModel):
+    game_id: int
     game_type: str
     memory_id: int | None = None
     question: str
@@ -20,5 +21,5 @@ class GameForPlayer(BaseModel):
     difficulty: str
 
 class GameAnswerRequest(BaseModel):
-    memory_id: int
+    game_id: int
     answer: str
