@@ -125,3 +125,33 @@ def get_patient_game_history(
     )
 
     return attempts
+
+@router.get("/analytics/patient/{patient_id}")
+def get_patient_game_analytics(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    attempts = (
+        db.query(GameAttempt)
+        .join(Memory, GameAttempt.memory_id == Memory.id)
+        .filter(Memory.patient_id == patient_id)
+        .all()
+    )
+
+    total_attempts = len(attempts)
+    correct_attempts = sum(1 for attempt in attempts if attempt.correct)
+    total_score = sum(attempt.score for attempt in attempts)
+
+    accuracy = (
+        (correct_attempts / total_attempts) * 100
+        if total_attempts > 0
+        else 0
+    )
+
+    return {
+        "patient_id": patient_id,
+        "total_attempts": total_attempts,
+        "correct_attempts": correct_attempts,
+        "total_score": total_score,
+        "accuracy": round(accuracy, 2)
+    }
