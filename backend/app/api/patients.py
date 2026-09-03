@@ -1,51 +1,50 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database.database import SessionLocal
+from app.database.database import get_db
+from app.models.patients import Patient
+from app.models.user import User
 from app.schemas.patient import PatientCreate, PatientResponse
-from app.services.patient_service import (
-    create_patient,
-    get_all_patients,
-    get_patient,
-    delete_patient,
+from app.utils.auth import get_current_user
+
+router = APIRouter(
+    prefix="/patients",
+    tags=["Patients"],
 )
-
-router = APIRouter(prefix="/patients", tags=["Patients"])
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.post("/", response_model=PatientResponse)
-def create_new_patient(patient: PatientCreate, db: Session = Depends(get_db)):
-    return create_patient(db, patient)
+def create_patient(
+    patient: PatientCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    new_patient = Patient(**patient.model_dump())
+
+    db.add(new_patient)
+    db.commit()
+    db.refresh(new_patient)
+
+    return new_patient
 
 
 @router.get("/", response_model=list[PatientResponse])
-def read_patients(db: Session = Depends(get_db)):
-    return get_all_patients(db)
+def get_patients(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return db.query(Patient).all()
 
 
 @router.get("/{patient_id}", response_model=PatientResponse)
-def read_patient(patient_id: int, db: Session = Depends(get_db)):
-    patient = get_patient(db, patient_id)
+def get_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
 
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
     return patient
-
-
-@router.delete("/{patient_id}")
-def remove_patient(patient_id: int, db: Session = Depends(get_db)):
-    patient = delete_patient(db, patient_id)
-
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-
-    return {"message": "Patient deleted successfully"}
