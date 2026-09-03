@@ -8,8 +8,12 @@ from app.models.game_attempt import GameAttempt
 from app.models.generated_game import GeneratedGame
 from app.services.game_generator import generate_game_from_memory
 from app.services.ai_game_generator import generate_ai_game
-from app.schemas.game import GameResponse, GameAnswer, GameForPlayer, GameAnswerRequest
-
+from app.schemas.game import (
+    GameResponse,
+    GameAnswer,
+    GameForPlayer,
+    GameAnswerRequest,
+)
 
 router = APIRouter(
     prefix="/games",
@@ -44,7 +48,18 @@ def generate_game(
         "language": language
     }
 
-    game = generate_ai_game(memory_data)
+    try:
+        game = generate_ai_game(memory_data)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate AI game."
+        )
 
     generated_game = GeneratedGame(
         memory_id=memory.id,
@@ -61,13 +76,14 @@ def generate_game(
     db.refresh(generated_game)
 
     return {
-    "game_id": generated_game.id,
-    "game_type": generated_game.game_type,
-    "memory_id": generated_game.memory_id,
-    "question": generated_game.question,
-    "options": json.loads(generated_game.options),
-    "difficulty": generated_game.difficulty
-}
+        "game_id": generated_game.id,
+        "game_type": generated_game.game_type,
+        "memory_id": generated_game.memory_id,
+        "question": generated_game.question,
+        "options": json.loads(generated_game.options),
+        "difficulty": generated_game.difficulty
+    }
+
 
 @router.post("/check-answer")
 def check_answer(
@@ -112,6 +128,7 @@ def check_answer(
         "attempt_id": attempt.id
     }
 
+
 @router.get("/history/{memory_id}")
 def get_game_history(
     memory_id: int,
@@ -125,6 +142,7 @@ def get_game_history(
     )
 
     return attempts
+
 
 @router.get("/history/patient/{patient_id}")
 def get_patient_game_history(
@@ -141,6 +159,7 @@ def get_patient_game_history(
 
     return attempts
 
+
 @router.get("/analytics/patient/{patient_id}")
 def get_patient_game_analytics(
     patient_id: int,
@@ -154,8 +173,12 @@ def get_patient_game_analytics(
     )
 
     total_attempts = len(attempts)
-    correct_attempts = sum(1 for attempt in attempts if attempt.correct)
-    total_score = sum(attempt.score for attempt in attempts)
+    correct_attempts = sum(
+        1 for attempt in attempts if attempt.correct
+    )
+    total_score = sum(
+        attempt.score for attempt in attempts
+    )
 
     accuracy = (
         (correct_attempts / total_attempts) * 100
