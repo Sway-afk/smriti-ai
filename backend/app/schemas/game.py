@@ -23,3 +23,4 @@ class GameForPlayer(BaseModel):
 class GameAnswerRequest(BaseModel):
     game_id: int
     answer: str
+    session_id: int | None = None

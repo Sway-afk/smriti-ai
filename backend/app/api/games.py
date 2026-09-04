@@ -1,4 +1,5 @@
 import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -6,14 +7,15 @@ from app.database.database import get_db
 from app.models.memory import Memory
 from app.models.game_attempt import GameAttempt
 from app.models.generated_game import GeneratedGame
-from app.services.game_generator import generate_game_from_memory
+from app.models.therapy_session import TherapySession
+from app.models.session_game import SessionGame
 from app.services.ai_game_generator import generate_ai_game
+from app.services.memory_dna import build_memory_dna
 from app.schemas.game import (
-    GameResponse,
-    GameAnswer,
     GameForPlayer,
     GameAnswerRequest,
 )
+
 
 router = APIRouter(
     prefix="/games",
@@ -45,20 +47,22 @@ def generate_game(
         "title": memory.title,
         "content": memory.content,
         "difficulty": difficulty,
-        "language": language
+        "language": language,
     }
+
+    # Build structured Memory DNA first
+    memory_dna = build_memory_dna(memory_data)
+
+    # Give the structured DNA to the game generator
+    memory_data["memory_dna"] = memory_dna
 
     try:
         game = generate_ai_game(memory_data)
-    except ValueError as e:
+
+    except ValueError as error:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate AI game."
+            detail=str(error)
         )
 
     generated_game = GeneratedGame(
@@ -119,6 +123,46 @@ def check_answer(
     )
 
     db.add(attempt)
+
+    if request.session_id is not None:
+
+        session = (
+            db.query(TherapySession)
+            .filter(
+                TherapySession.id == request.session_id
+            )
+            .first()
+        )
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Therapy session not found"
+            )
+
+        session_game = (
+            db.query(SessionGame)
+            .filter(
+                SessionGame.session_id == request.session_id,
+                SessionGame.game_id == request.game_id
+            )
+            .first()
+        )
+
+        if session_game is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Game not found in this therapy session"
+            )
+
+        if not session_game.completed:
+
+            session_game.completed = True
+            session.completed_games += 1
+
+            if session.completed_games >= session.total_games:
+                session.status = "completed"
+
     db.commit()
     db.refresh(attempt)
 
@@ -136,8 +180,12 @@ def get_game_history(
 ):
     attempts = (
         db.query(GameAttempt)
-        .filter(GameAttempt.memory_id == memory_id)
-        .order_by(GameAttempt.created_at.desc())
+        .filter(
+            GameAttempt.memory_id == memory_id
+        )
+        .order_by(
+            GameAttempt.created_at.desc()
+        )
         .all()
     )
 
@@ -151,9 +199,16 @@ def get_patient_game_history(
 ):
     attempts = (
         db.query(GameAttempt)
-        .join(Memory, GameAttempt.memory_id == Memory.id)
-        .filter(Memory.patient_id == patient_id)
-        .order_by(GameAttempt.created_at.desc())
+        .join(
+            Memory,
+            GameAttempt.memory_id == Memory.id
+        )
+        .filter(
+            Memory.patient_id == patient_id
+        )
+        .order_by(
+            GameAttempt.created_at.desc()
+        )
         .all()
     )
 
@@ -167,17 +222,27 @@ def get_patient_game_analytics(
 ):
     attempts = (
         db.query(GameAttempt)
-        .join(Memory, GameAttempt.memory_id == Memory.id)
-        .filter(Memory.patient_id == patient_id)
+        .join(
+            Memory,
+            GameAttempt.memory_id == Memory.id
+        )
+        .filter(
+            Memory.patient_id == patient_id
+        )
         .all()
     )
 
     total_attempts = len(attempts)
+
     correct_attempts = sum(
-        1 for attempt in attempts if attempt.correct
+        1
+        for attempt in attempts
+        if attempt.correct
     )
+
     total_score = sum(
-        attempt.score for attempt in attempts
+        attempt.score
+        for attempt in attempts
     )
 
     accuracy = (
@@ -186,10 +251,169 @@ def get_patient_game_analytics(
         else 0
     )
 
+    # --------------------------------
+    # Performance by game type
+    # --------------------------------
+
+    game_type_stats = {}
+
+    for attempt in attempts:
+
+        game_type = attempt.game_type
+
+        if game_type not in game_type_stats:
+            game_type_stats[game_type] = {
+                "total_attempts": 0,
+                "correct_attempts": 0,
+                "accuracy": 0
+            }
+
+        game_type_stats[game_type]["total_attempts"] += 1
+
+        if attempt.correct:
+            game_type_stats[game_type][
+                "correct_attempts"
+            ] += 1
+
+    for game_type, stats in game_type_stats.items():
+
+        stats["accuracy"] = round(
+            (
+                stats["correct_attempts"]
+                / stats["total_attempts"]
+            ) * 100,
+            2
+        )
+
+    # --------------------------------
+    # Performance by memory
+    # --------------------------------
+
+    memory_stats = {}
+
+    for attempt in attempts:
+
+        memory = (
+            db.query(Memory)
+            .filter(
+                Memory.id == attempt.memory_id
+            )
+            .first()
+        )
+
+        if memory is None:
+            continue
+
+        memory_id = memory.id
+
+        if memory_id not in memory_stats:
+            memory_stats[memory_id] = {
+                "memory_title": memory.title,
+                "total_attempts": 0,
+                "correct_attempts": 0,
+                "accuracy": 0
+            }
+
+        memory_stats[memory_id][
+            "total_attempts"
+        ] += 1
+
+        if attempt.correct:
+            memory_stats[memory_id][
+                "correct_attempts"
+            ] += 1
+
+    for memory_id, stats in memory_stats.items():
+
+        stats["accuracy"] = round(
+            (
+                stats["correct_attempts"]
+                / stats["total_attempts"]
+            ) * 100,
+            2
+        )
+
+    # --------------------------------
+    # Performance by difficulty
+    # --------------------------------
+
+    difficulty_stats = {}
+
+    for attempt in attempts:
+
+        difficulty = attempt.difficulty
+
+        if difficulty not in difficulty_stats:
+            difficulty_stats[difficulty] = {
+                "total_attempts": 0,
+                "correct_attempts": 0,
+                "accuracy": 0
+            }
+
+        difficulty_stats[difficulty][
+            "total_attempts"
+        ] += 1
+
+        if attempt.correct:
+            difficulty_stats[difficulty][
+                "correct_attempts"
+            ] += 1
+
+    for difficulty, stats in difficulty_stats.items():
+
+        stats["accuracy"] = round(
+            (
+                stats["correct_attempts"]
+                / stats["total_attempts"]
+            ) * 100,
+            2
+        )
+
     return {
         "patient_id": patient_id,
         "total_attempts": total_attempts,
         "correct_attempts": correct_attempts,
         "total_score": total_score,
-        "accuracy": round(accuracy, 2)
+        "accuracy": round(
+            accuracy,
+            2
+        ),
+        "game_type_stats": game_type_stats,
+        "memory_stats": memory_stats,
+        "difficulty_stats": difficulty_stats
     }
+
+
+@router.get("/activity/patient/{patient_id}")
+def get_patient_recent_activity(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    attempts = (
+        db.query(GameAttempt)
+        .join(
+            Memory,
+            GameAttempt.memory_id == Memory.id
+        )
+        .filter(
+            Memory.patient_id == patient_id
+        )
+        .order_by(
+            GameAttempt.created_at.desc()
+        )
+        .limit(10)
+        .all()
+    )
+
+    return [
+        {
+            "attempt_id": attempt.id,
+            "memory_id": attempt.memory_id,
+            "game_type": attempt.game_type,
+            "difficulty": attempt.difficulty,
+            "correct": attempt.correct,
+            "score": attempt.score,
+            "created_at": attempt.created_at
+        }
+        for attempt in attempts
+    ]

@@ -1,4 +1,5 @@
 import random
+import re
 
 
 def extract_memory_facts(content: str) -> list[dict]:
@@ -109,24 +110,100 @@ def extract_memory_facts(content: str) -> list[dict]:
             })
 
     # -------------------------
-    # Simple person-name detection
+    # Person-name detection
     # -------------------------
 
-    words = content.split()
+    known_words = {
+        word.lower()
+        for word in (
+            locations
+            + relationships
+            + events
+            + activities
+        )
+    }
+
+    common_non_person_words = {
+        "a",
+        "an",
+        "the",
+        "my",
+        "our",
+        "his",
+        "her",
+        "their",
+        "this",
+        "that",
+        "these",
+        "those",
+        "i",
+        "we",
+        "he",
+        "she",
+        "they",
+        "it",
+        "and",
+        "but",
+        "with",
+        "from",
+        "was",
+        "were",
+        "is",
+        "are",
+        "in",
+        "on",
+        "at",
+        "to",
+        "of",
+        "for",
+        "family",
+        "beautiful",
+        "memory",
+    }
+
+    words = re.findall(
+        r"\b[A-Z][a-zA-Z'-]+\b",
+        content
+    )
+
+    seen_people = set()
 
     for word in words:
-        cleaned = word.strip(".,!?")
+        cleaned = word.strip(
+            ".,!?;:'\"()[]{}"
+        )
 
-        if cleaned.istitle():
-            facts.append({
-                "type": "person",
-                "value": cleaned,
-            })
+        if not cleaned:
+            continue
+
+        if len(cleaned) < 2:
+            continue
+
+        cleaned_lower = cleaned.lower()
+
+        if cleaned_lower in known_words:
+            continue
+
+        if cleaned_lower in common_non_person_words:
+            continue
+
+        if cleaned_lower in seen_people:
+            continue
+
+        seen_people.add(cleaned_lower)
+
+        facts.append({
+            "type": "person",
+            "value": cleaned,
+        })
 
     return facts
 
 
-def get_question_template(fact_type: str, language: str) -> str:
+def get_question_template(
+    fact_type: str,
+    language: str
+) -> str:
     """
     Returns translated question templates.
     Supports:
@@ -176,12 +253,21 @@ def get_question_template(fact_type: str, language: str) -> str:
         },
     }
 
-    lang = templates.get(language, templates["english"])
+    lang = templates.get(
+        language,
+        templates["english"]
+    )
 
-    return lang.get(fact_type, lang["default"])
+    return lang.get(
+        fact_type,
+        lang["default"]
+    )
 
 
-def translate_options(options: list[str], language: str) -> list[str]:
+def translate_options(
+    options: list[str],
+    language: str
+) -> list[str]:
     """
     Translate multiple choice options.
     """
@@ -248,7 +334,7 @@ def translate_options(options: list[str], language: str) -> list[str]:
             "home": "ঘৰ",
             "park": "উদ্যান",
             "school": "বিদ্যালয়",
-            "hospital": "হাসপাতাল",
+            "hospital": "চিকিৎসালয়",
             "temple": "মন্দিৰ",
             "market": "বজাৰ",
             "daughter": "জীয়েক",
@@ -274,16 +360,28 @@ def translate_options(options: list[str], language: str) -> list[str]:
     if language == "english":
         return options
 
-    mapping = dictionaries.get(language, {})
+    mapping = dictionaries.get(
+        language,
+        {}
+    )
 
     translated = []
+
     for option in options:
-        translated.append(mapping.get(option.lower(), option))
+        translated.append(
+            mapping.get(
+                option.lower(),
+                option
+            )
+        )
 
     return translated
 
 
-def get_distractors(fact_type: str, answer: str) -> list[str]:
+def get_distractors(
+    fact_type: str,
+    answer: str
+) -> list[str]:
 
     if fact_type == "location":
         choices = [
@@ -347,12 +445,29 @@ def get_distractors(fact_type: str, answer: str) -> list[str]:
 
 
 def generate_ai_game(memory: dict) -> dict:
+    """
+    Generate a personalized game.
+
+    If Memory DNA is provided, use its structured facts.
+    Otherwise fall back to extracting facts from raw memory.
+    """
 
     content = memory.get("content", "")
-    difficulty = memory.get("difficulty", "easy")
-    language = memory.get("language", "English")
+    difficulty = memory.get(
+        "difficulty",
+        "easy"
+    )
+    language = memory.get(
+        "language",
+        "English"
+    )
 
-    facts = extract_memory_facts(content)
+    memory_dna = memory.get("memory_dna")
+
+    if memory_dna and memory_dna.get("facts"):
+        facts = memory_dna["facts"]
+    else:
+        facts = extract_memory_facts(content)
 
     if not facts:
         raise ValueError(
@@ -376,8 +491,13 @@ def generate_ai_game(memory: dict) -> dict:
         language,
     )
 
-    answer_index = options.index(fact["value"])
-    translated_answer = translated_options[answer_index]
+    answer_index = options.index(
+        fact["value"]
+    )
+
+    translated_answer = translated_options[
+        answer_index
+    ]
 
     return {
         "game_type": "multiple_choice",
@@ -385,4 +505,8 @@ def generate_ai_game(memory: dict) -> dict:
         "options": translated_options,
         "difficulty": difficulty,
         "answer": translated_answer,
+        "memory_fact": {
+            "type": fact["type"],
+            "value": fact["value"],
+        },
     }

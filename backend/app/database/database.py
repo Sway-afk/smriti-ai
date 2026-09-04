@@ -40,3 +40,5 @@ import app.models.memory
 import app.models.patients
 import app.models.game_attempt
 import app.models.generated_game
+import app.models.therapy_session
+import app.models.session_game
