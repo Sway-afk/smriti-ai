@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -50,10 +51,8 @@ def generate_game(
         "language": language,
     }
 
-    # Build structured Memory DNA first
     memory_dna = build_memory_dna(memory_data)
 
-    # Give the structured DNA to the game generator
     memory_data["memory_dna"] = memory_dna
 
     try:
@@ -162,6 +161,7 @@ def check_answer(
 
             if session.completed_games >= session.total_games:
                 session.status = "completed"
+                session.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(attempt)
@@ -251,10 +251,6 @@ def get_patient_game_analytics(
         else 0
     )
 
-    # --------------------------------
-    # Performance by game type
-    # --------------------------------
-
     game_type_stats = {}
 
     for attempt in attempts:
@@ -284,10 +280,6 @@ def get_patient_game_analytics(
             ) * 100,
             2
         )
-
-    # --------------------------------
-    # Performance by memory
-    # --------------------------------
 
     memory_stats = {}
 
@@ -332,10 +324,6 @@ def get_patient_game_analytics(
             ) * 100,
             2
         )
-
-    # --------------------------------
-    # Performance by difficulty
-    # --------------------------------
 
     difficulty_stats = {}
 
