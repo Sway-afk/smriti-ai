@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.memory import Memory
+from app.models.user import User
 from app.schemas.memory import MemoryCreate, MemoryUpdate, MemoryResponse
+from app.utils.roles import require_doctor_or_caregiver
 
 
 router = APIRouter(
@@ -13,7 +15,11 @@ router = APIRouter(
 
 
 @router.post("/", response_model=MemoryResponse)
-def create_memory(memory: MemoryCreate, db: Session = Depends(get_db)):
+def create_memory(
+    memory: MemoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
     new_memory = Memory(
         patient_id=memory.patient_id,
         title=memory.title,
@@ -35,7 +41,8 @@ def get_memories(
     search: str | None = None,
     skip: int = 0,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     query = db.query(Memory).filter(Memory.patient_id == patient_id)
 
@@ -45,15 +52,19 @@ def get_memories(
     if search is not None:
         search_pattern = f"%{search}%"
         query = query.filter(
-            (Memory.title.ilike(search_pattern)) |
-            (Memory.content.ilike(search_pattern))
+            (Memory.title.ilike(search_pattern))
+            | (Memory.content.ilike(search_pattern))
         )
 
     return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{memory_id}", response_model=MemoryResponse)
-def get_memory(memory_id: int, db: Session = Depends(get_db)):
+def get_memory(
+    memory_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
     memory = (
         db.query(Memory)
         .filter(Memory.id == memory_id)
@@ -69,30 +80,12 @@ def get_memory(memory_id: int, db: Session = Depends(get_db)):
     return memory
 
 
-@router.delete("/{memory_id}")
-def delete_memory(memory_id: int, db: Session = Depends(get_db)):
-    memory = (
-        db.query(Memory)
-        .filter(Memory.id == memory_id)
-        .first()
-    )
-
-    if memory is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Memory not found"
-        )
-
-    db.delete(memory)
-    db.commit()
-
-    return {"message": "Memory deleted successfully"}
-
 @router.put("/{memory_id}", response_model=MemoryResponse)
 def update_memory(
     memory_id: int,
     memory_update: MemoryUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     memory = (
         db.query(Memory)
@@ -119,3 +112,29 @@ def update_memory(
     db.refresh(memory)
 
     return memory
+
+
+@router.delete("/{memory_id}")
+def delete_memory(
+    memory_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id)
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found"
+        )
+
+    db.delete(memory)
+    db.commit()
+
+    return {
+        "message": "Memory deleted successfully"
+    }

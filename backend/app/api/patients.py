@@ -5,7 +5,7 @@ from app.database.database import get_db
 from app.models.patients import Patient
 from app.models.user import User
 from app.schemas.patient import PatientCreate, PatientResponse
-from app.utils.auth import get_current_user
+from app.utils.roles import require_doctor_or_caregiver
 
 router = APIRouter(
     prefix="/patients",
@@ -17,7 +17,7 @@ router = APIRouter(
 def create_patient(
     patient: PatientCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     new_patient = Patient(**patient.model_dump())
 
@@ -31,7 +31,7 @@ def create_patient(
 @router.get("/", response_model=list[PatientResponse])
 def get_patients(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     return db.query(Patient).all()
 
@@ -40,11 +40,18 @@ def get_patients(
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = (
+        db.query(Patient)
+        .filter(Patient.id == patient_id)
+        .first()
+    )
 
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found",
+        )
 
     return patient

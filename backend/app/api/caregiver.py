@@ -2,22 +2,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models.patients import Patient
-from app.models.memory import Memory
 from app.models.game_attempt import GameAttempt
+from app.models.memory import Memory
+from app.models.patients import Patient
 from app.models.therapy_session import TherapySession
-
+from app.models.user import User
+from app.utils.roles import require_caregiver
 
 router = APIRouter(
     prefix="/caregiver",
-    tags=["Caregiver"]
+    tags=["Caregiver"],
 )
 
 
 @router.get("/dashboard/{patient_id}")
 def get_caregiver_dashboard(
     patient_id: int,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_caregiver),
+    db: Session = Depends(get_db),
 ):
     patient = (
         db.query(Patient)
@@ -28,14 +30,14 @@ def get_caregiver_dashboard(
     if patient is None:
         raise HTTPException(
             status_code=404,
-            detail="Patient not found"
+            detail="Patient not found",
         )
 
     attempts = (
         db.query(GameAttempt)
         .join(
             Memory,
-            GameAttempt.memory_id == Memory.id
+            GameAttempt.memory_id == Memory.id,
         )
         .filter(
             Memory.patient_id == patient_id
@@ -84,7 +86,7 @@ def get_caregiver_dashboard(
         db.query(GameAttempt)
         .join(
             Memory,
-            GameAttempt.memory_id == Memory.id
+            GameAttempt.memory_id == Memory.id,
         )
         .filter(
             Memory.patient_id == patient_id
@@ -121,8 +123,8 @@ def get_caregiver_dashboard(
                     latest_session.completed_games
                     / latest_session.total_games
                 ) * 100,
-                2
-            ) if latest_session.total_games > 0 else 0,
+                2,
+            ) if latest_session and latest_session.total_games > 0 else 0,
             "started_at": latest_session.started_at,
             "completed_at": latest_session.completed_at,
         } if latest_session else None,
