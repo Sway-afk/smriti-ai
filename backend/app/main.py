@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.database import engine
 from app.database.base import Base
@@ -32,6 +33,16 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Smriti AI Backend",
     version="1.0.0"
+)
+
+
+# Allow frontend applications to communicate with the backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
