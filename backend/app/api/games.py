@@ -29,8 +29,22 @@ def generate_game(
     memory_id: int,
     difficulty: str = "easy",
     language: str = "English",
+    game_type: str = "multiple_choice",
     db: Session = Depends(get_db)
 ):
+    if game_type not in {
+        "multiple_choice",
+        "true_false",
+        "fill_blank"
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported game type. Use multiple_choice, "
+                "true_false, or fill_blank."
+            )
+        )
+
     memory = (
         db.query(Memory)
         .filter(Memory.id == memory_id)
@@ -49,10 +63,10 @@ def generate_game(
         "content": memory.content,
         "difficulty": difficulty,
         "language": language,
+        "game_type": game_type,
     }
 
     memory_dna = build_memory_dna(memory_data)
-
     memory_data["memory_dna"] = memory_dna
 
     try:
@@ -161,7 +175,9 @@ def check_answer(
 
             if session.completed_games >= session.total_games:
                 session.status = "completed"
-                session.completed_at = datetime.now(timezone.utc)
+                session.completed_at = datetime.now(
+                    timezone.utc
+                )
 
     db.commit()
     db.refresh(attempt)
