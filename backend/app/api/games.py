@@ -10,6 +10,8 @@ from app.models.game_attempt import GameAttempt
 from app.models.generated_game import GeneratedGame
 from app.models.therapy_session import TherapySession
 from app.models.session_game import SessionGame
+from app.models.user import User
+from app.utils.roles import require_doctor_or_caregiver
 from app.services.ai_game_generator import generate_ai_game
 from app.services.memory_dna import build_memory_dna
 from app.schemas.game import (
@@ -30,7 +32,8 @@ def generate_game(
     difficulty: str = "easy",
     language: str = "English",
     game_type: str = "multiple_choice",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     if game_type not in {
         "multiple_choice",
@@ -192,7 +195,8 @@ def check_answer(
 @router.get("/history/{memory_id}")
 def get_game_history(
     memory_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     attempts = (
         db.query(GameAttempt)
@@ -211,7 +215,8 @@ def get_game_history(
 @router.get("/history/patient/{patient_id}")
 def get_patient_game_history(
     patient_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     attempts = (
         db.query(GameAttempt)
@@ -234,7 +239,8 @@ def get_patient_game_history(
 @router.get("/analytics/patient/{patient_id}")
 def get_patient_game_analytics(
     patient_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     attempts = (
         db.query(GameAttempt)
@@ -391,7 +397,8 @@ def get_patient_game_analytics(
 @router.get("/activity/patient/{patient_id}")
 def get_patient_recent_activity(
     patient_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     attempts = (
         db.query(GameAttempt)

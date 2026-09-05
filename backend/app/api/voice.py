@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.memory import Memory
 from app.models.patients import Patient
+from app.models.user import User
 from app.schemas.memory import MemoryResponse
-
+from app.utils.roles import require_doctor_or_caregiver
 
 router = APIRouter(
     prefix="/voice",
@@ -198,7 +199,8 @@ async def transcribe_and_save_memory(
     patient_id: int,
     file: UploadFile = File(...),
     language: str = "English",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
 ):
     patient = (
         db.query(Patient)
