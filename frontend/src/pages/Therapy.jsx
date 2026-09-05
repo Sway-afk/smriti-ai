@@ -13,26 +13,45 @@ function Therapy() {
   const [loadingLanguage, setLoadingLanguage] = useState(true);
 
   const [speaking, setSpeaking] = useState(false);
+  const [speakingOption, setSpeakingOption] = useState("");
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("smriti_token");
+
+    if (!token) {
+      throw new Error("Please log in again.");
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
 
   useEffect(() => {
     const loadPatientLanguage = async () => {
       try {
         const response = await fetch(
-          `${API_URL}/caregiver/dashboard/${PATIENT_ID}`
+          `${API_URL}/caregiver/dashboard/${PATIENT_ID}`,
+          {
+            headers: getAuthHeaders(),
+          }
         );
 
+        const data = await response.json();
+
         if (!response.ok) {
-          throw new Error("Could not load patient language.");
+          throw new Error(
+            data.detail || "Could not load patient language."
+          );
         }
 
-        const data = await response.json();
         const patientLanguage = data?.patient?.language;
 
         if (patientLanguage) {
           setLanguage(patientLanguage);
         }
       } catch (error) {
-        setLanguage("English");
+        setMessage(error.message);
       } finally {
         setLoadingLanguage(false);
       }
@@ -48,12 +67,13 @@ function Therapy() {
 
     try {
       const response = await fetch(
-        `${API_URL}/games/generate/${PATIENT_ID === 1 ? 1 : PATIENT_ID}?difficulty=easy&language=${encodeURIComponent(
+        `${API_URL}/games/generate/${PATIENT_ID}?difficulty=easy&language=${encodeURIComponent(
           language
         )}`,
         {
           method: "POST",
           headers: {
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
         }
@@ -85,6 +105,7 @@ function Therapy() {
         {
           method: "POST",
           headers: {
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -114,23 +135,31 @@ function Therapy() {
     }
   };
 
-  const speakText = async (text) => {
+  const speakText = async (text, option = "") => {
     if (!text) {
       return;
     }
 
     setSpeaking(true);
+    setSpeakingOption(option);
     setMessage("");
 
     try {
       const response = await fetch(
         `${API_URL}/tts/speak?text=${encodeURIComponent(
           text
-        )}&language=${encodeURIComponent(language)}`
+        )}&language=${encodeURIComponent(language)}`,
+        {
+          headers: getAuthHeaders(),
+        }
       );
 
       if (!response.ok) {
-        throw new Error("Could not generate audio.");
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data.detail || "Could not generate audio."
+        );
       }
 
       const audioBlob = await response.blob();
@@ -140,17 +169,20 @@ function Therapy() {
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
         setSpeaking(false);
+        setSpeakingOption("");
       };
 
       audio.onerror = () => {
         URL.revokeObjectURL(audioUrl);
         setSpeaking(false);
+        setSpeakingOption("");
         setMessage("Could not play the audio.");
       };
 
       await audio.play();
     } catch (error) {
       setSpeaking(false);
+      setSpeakingOption("");
       setMessage(error.message);
     }
   };
@@ -298,7 +330,7 @@ function Therapy() {
                 cursor: speaking ? "not-allowed" : "pointer",
               }}
             >
-              {speaking
+              {speaking && !speakingOption
                 ? "🔊 Speaking..."
                 : "🔊 Listen to Question"}
             </button>
@@ -310,28 +342,63 @@ function Therapy() {
               }}
             >
               {game.options?.map((option, index) => (
-                <button
+                <div
                   key={index}
-                  onClick={() => checkAnswer(option)}
                   style={{
-                    padding: "16px",
-                    borderRadius: "12px",
-                    border:
-                      selectedAnswer === option
-                        ? "2px solid #57765f"
-                        : "1px solid #e8e1d5",
-                    background:
-                      selectedAnswer === option
-                        ? "#edf3ed"
-                        : "#fffdf9",
-                    color: "#28352f",
-                    fontSize: "17px",
-                    cursor: "pointer",
-                    textAlign: "left",
+                    display: "flex",
+                    gap: "10px",
+                    alignItems: "stretch",
                   }}
                 >
-                  {option}
-                </button>
+                  <button
+                    onClick={() => checkAnswer(option)}
+                    style={{
+                      flex: 1,
+                      padding: "16px",
+                      borderRadius: "12px",
+                      border:
+                        selectedAnswer === option
+                          ? "2px solid #57765f"
+                          : "1px solid #e8e1d5",
+                      background:
+                        selectedAnswer === option
+                          ? "#edf3ed"
+                          : "#fffdf9",
+                      color: "#28352f",
+                      fontSize: "17px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    {option}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      speakText(option, option)
+                    }
+                    disabled={
+                      speaking && speakingOption !== option
+                    }
+                    aria-label={`Listen to ${option}`}
+                    style={{
+                      width: "58px",
+                      borderRadius: "12px",
+                      border: "1px solid #57765f",
+                      background: "#fffdf9",
+                      color: "#57765f",
+                      fontSize: "20px",
+                      cursor:
+                        speaking && speakingOption !== option
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                  >
+                    {speakingOption === option
+                      ? "🔊"
+                      : "🔈"}
+                  </button>
+                </div>
               ))}
             </div>
           </div>

@@ -20,17 +20,35 @@ function MemoryVault() {
   const [language, setLanguage] = useState("English");
   const [loadingLanguage, setLoadingLanguage] = useState(true);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("smriti_token");
+
+    if (!token) {
+      throw new Error("Please log in again.");
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
   const loadMemories = async () => {
     try {
       const response = await fetch(
-        `${API_URL}/memories/?patient_id=${PATIENT_ID}`
+        `${API_URL}/memories/?patient_id=${PATIENT_ID}`,
+        {
+          headers: getAuthHeaders(),
+        }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Could not load memories.");
+        throw new Error(
+          data.detail || "Could not load memories."
+        );
       }
 
-      const data = await response.json();
       setMemories(data);
     } catch (error) {
       setMessage(error.message);
@@ -42,20 +60,27 @@ function MemoryVault() {
   const loadPatientLanguage = async () => {
     try {
       const response = await fetch(
-        `${API_URL}/caregiver/dashboard/${PATIENT_ID}`
+        `${API_URL}/caregiver/dashboard/${PATIENT_ID}`,
+        {
+          headers: getAuthHeaders(),
+        }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Could not load patient language.");
+        throw new Error(
+          data.detail || "Could not load patient language."
+        );
       }
 
-      const data = await response.json();
       const patientLanguage = data?.patient?.language;
 
       if (patientLanguage) {
         setLanguage(patientLanguage);
       }
     } catch (error) {
+      setMessage(error.message);
       setLanguage("English");
     } finally {
       setLoadingLanguage(false);
@@ -77,6 +102,7 @@ function MemoryVault() {
       const response = await fetch(`${API_URL}/memories/`, {
         method: "POST",
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -123,6 +149,7 @@ function MemoryVault() {
         {
           method: "POST",
           headers: {
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
         }
@@ -174,6 +201,7 @@ function MemoryVault() {
         {
           method: "POST",
           headers: {
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -206,447 +234,555 @@ function MemoryVault() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f8f5ef",
-        padding: "45px 7%",
-        color: "#28352f",
-        fontFamily: "Arial, Helvetica, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-        }}
-      >
-        <p
-          style={{
-            color: "#57765f",
-            fontSize: "14px",
-            fontWeight: "700",
-            letterSpacing: "1px",
-            margin: "0 0 8px",
-          }}
-        >
-          SMRITI AI
-        </p>
+    <>
+      <style>
+        {`
+          .memory-vault-page {
+            min-height: 100vh;
+            background: #f8f5ef;
+            padding: 45px 7%;
+            color: #28352f;
+            font-family: Arial, Helvetica, sans-serif;
+          }
 
-        <h1
-          style={{
-            color: "#28352f",
-            fontSize: "44px",
-            margin: "0 0 10px",
-          }}
-        >
-          Memory Vault
-        </h1>
+          .memory-vault-container {
+            max-width: 1100px;
+            margin: 0 auto;
+          }
 
-        <p
-          style={{
-            color: "#66736b",
-            fontSize: "18px",
-            lineHeight: "1.6",
-            marginBottom: "15px",
-          }}
-        >
-          Add meaningful memories that can later become
-          personalized cognitive activities.
-        </p>
+          .memory-vault-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 25px;
+            align-items: start;
+          }
 
-        <p
-          style={{
-            color: "#57765f",
-            fontSize: "15px",
-            fontWeight: "700",
-            marginBottom: "35px",
-          }}
-        >
-          {loadingLanguage
-            ? "Loading patient language..."
-            : `Patient language: ${language}`}
-        </p>
+          .memory-vault-panel {
+            background: #fffdf9;
+            border: 1px solid #e8e1d5;
+            border-radius: 20px;
+            padding: 28px;
+            min-width: 0;
+          }
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "25px",
-            alignItems: "start",
-          }}
-        >
-          <div
+          .memory-vault-input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #d9dfd8;
+            border-radius: 10px;
+            font-size: 16px;
+            background: #fffdf9;
+            color: #28352f;
+          }
+
+          .memory-vault-input:focus {
+            outline: none;
+            border-color: #57765f;
+            box-shadow: 0 0 0 3px rgba(87, 118, 95, 0.1);
+          }
+
+          .memory-vault-save-button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            background: #57765f;
+            color: #ffffff;
+            font-size: 17px;
+            font-weight: 700;
+          }
+
+          .memory-vault-game-button {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            background: #57765f;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 700;
+          }
+
+          .memory-vault-option {
+            width: 100%;
+            padding: 13px;
+            border-radius: 10px;
+            color: #28352f;
+            font-size: 15px;
+            cursor: pointer;
+            text-align: left;
+          }
+
+          @media (max-width: 900px) {
+            .memory-vault-page {
+              padding: 40px 5%;
+            }
+
+            .memory-vault-layout {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          @media (max-width: 600px) {
+            .memory-vault-page {
+              padding: 70px 16px 35px;
+            }
+
+            .memory-vault-container {
+              width: 100%;
+            }
+
+            .memory-vault-layout {
+              display: flex;
+              flex-direction: column;
+              gap: 18px;
+            }
+
+            .memory-vault-panel {
+              width: 100%;
+              padding: 20px;
+              border-radius: 18px;
+            }
+
+            .memory-vault-title {
+              font-size: 34px !important;
+            }
+
+            .memory-vault-description {
+              font-size: 16px !important;
+            }
+
+            .memory-vault-language {
+              margin-bottom: 25px !important;
+            }
+
+            .memory-vault-memory-card {
+              padding: 18px !important;
+            }
+
+            .memory-vault-game {
+              padding: 16px !important;
+            }
+
+            .memory-vault-option {
+              min-height: 48px;
+              font-size: 15px;
+            }
+          }
+
+          @media (max-width: 390px) {
+            .memory-vault-page {
+              padding-left: 12px;
+              padding-right: 12px;
+            }
+
+            .memory-vault-panel {
+              padding: 18px;
+            }
+
+            .memory-vault-title {
+              font-size: 32px !important;
+            }
+          }
+        `}
+      </style>
+
+      <div className="memory-vault-page">
+        <div className="memory-vault-container">
+          <p
             style={{
-              background: "#fffdf9",
-              border: "1px solid #e8e1d5",
-              borderRadius: "20px",
-              padding: "28px",
+              color: "#57765f",
+              fontSize: "14px",
+              fontWeight: "700",
+              letterSpacing: "1px",
+              margin: "0 0 8px",
             }}
           >
-            <h2
-              style={{
-                color: "#28352f",
-                marginTop: 0,
-                marginBottom: "22px",
-              }}
-            >
-              Add a Memory
-            </h2>
+            SMRITI AI
+          </p>
 
-            <form onSubmit={saveMemory}>
-              <label
+          <h1
+            className="memory-vault-title"
+            style={{
+              color: "#28352f",
+              fontSize: "44px",
+              margin: "0 0 10px",
+            }}
+          >
+            Memory Vault
+          </h1>
+
+          <p
+            className="memory-vault-description"
+            style={{
+              color: "#66736b",
+              fontSize: "18px",
+              lineHeight: "1.6",
+              marginBottom: "15px",
+              maxWidth: "700px",
+            }}
+          >
+            Add meaningful memories that can later become
+            personalized cognitive activities.
+          </p>
+
+          <p
+            className="memory-vault-language"
+            style={{
+              color: "#57765f",
+              fontSize: "15px",
+              fontWeight: "700",
+              marginBottom: "35px",
+            }}
+          >
+            {loadingLanguage
+              ? "Loading patient language..."
+              : `Patient language: ${language}`}
+          </p>
+
+          <div className="memory-vault-layout">
+            <div className="memory-vault-panel">
+              <h2
                 style={{
-                  display: "block",
-                  fontWeight: "600",
-                  color: "#46634f",
-                  marginBottom: "8px",
+                  color: "#28352f",
+                  marginTop: 0,
+                  marginBottom: "22px",
                 }}
               >
-                Memory title
-              </label>
+                Add a Memory
+              </h2>
 
-              <input
-                value={title}
-                onChange={(event) =>
-                  setTitle(event.target.value)
-                }
-                placeholder="Family Wedding"
-                required
+              <form onSubmit={saveMemory}>
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: "600",
+                    color: "#46634f",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Memory title
+                </label>
+
+                <input
+                  className="memory-vault-input"
+                  value={title}
+                  onChange={(event) =>
+                    setTitle(event.target.value)
+                  }
+                  placeholder="Family Wedding"
+                  required
+                  style={{ marginBottom: "20px" }}
+                />
+
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: "600",
+                    color: "#46634f",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Memory
+                </label>
+
+                <textarea
+                  className="memory-vault-input"
+                  value={content}
+                  onChange={(event) =>
+                    setContent(event.target.value)
+                  }
+                  placeholder="Tell us about this memory..."
+                  required
+                  rows="6"
+                  style={{
+                    resize: "vertical",
+                    marginBottom: "20px",
+                  }}
+                />
+
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: "600",
+                    color: "#46634f",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Category
+                </label>
+
+                <select
+                  className="memory-vault-input"
+                  value={category}
+                  onChange={(event) =>
+                    setCategory(event.target.value)
+                  }
+                  style={{
+                    marginBottom: "24px",
+                  }}
+                >
+                  <option value="family">Family</option>
+                  <option value="friends">Friends</option>
+                  <option value="places">Places</option>
+                  <option value="events">Events</option>
+                  <option value="food">Food</option>
+                  <option value="travel">Travel</option>
+                  <option value="other">Other</option>
+                </select>
+
+                <button
+                  type="submit"
+                  className="memory-vault-save-button"
+                  disabled={saving}
+                  style={{
+                    cursor: saving ? "not-allowed" : "pointer",
+                    opacity: saving ? 0.7 : 1,
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Memory"}
+                </button>
+              </form>
+
+              {message && (
+                <p
+                  style={{
+                    marginTop: "18px",
+                    color: message.startsWith("✓")
+                      ? "#57765f"
+                      : "#a05a45",
+                    fontWeight: "700",
+                  }}
+                >
+                  {message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <h2
                 style={{
-                  width: "100%",
-                  padding: "14px",
-                  border: "1px solid #d9dfd8",
-                  borderRadius: "10px",
-                  fontSize: "16px",
+                  color: "#28352f",
+                  marginTop: 0,
                   marginBottom: "20px",
                 }}
-              />
-
-              <label
-                style={{
-                  display: "block",
-                  fontWeight: "600",
-                  color: "#46634f",
-                  marginBottom: "8px",
-                }}
               >
-                Memory
-              </label>
+                Saved Memories
+              </h2>
 
-              <textarea
-                value={content}
-                onChange={(event) =>
-                  setContent(event.target.value)
-                }
-                placeholder="Tell us about this memory..."
-                required
-                rows="6"
-                style={{
-                  width: "100%",
-                  padding: "14px",
-                  border: "1px solid #d9dfd8",
-                  borderRadius: "10px",
-                  fontSize: "16px",
-                  resize: "vertical",
-                  marginBottom: "20px",
-                }}
-              />
+              {loading ? (
+                <p style={{ color: "#66736b" }}>
+                  Loading memories...
+                </p>
+              ) : memories.length === 0 ? (
+                <div
+                  className="memory-vault-panel"
+                  style={{
+                    color: "#66736b",
+                  }}
+                >
+                  No memories added yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "15px",
+                  }}
+                >
+                  {memories.map((memory) => {
+                    const game = games[memory.id];
+                    const gameMessage =
+                      gameMessages[memory.id];
 
-              <label
-                style={{
-                  display: "block",
-                  fontWeight: "600",
-                  color: "#46634f",
-                  marginBottom: "8px",
-                }}
-              >
-                Category
-              </label>
-
-              <select
-                value={category}
-                onChange={(event) =>
-                  setCategory(event.target.value)
-                }
-                style={{
-                  width: "100%",
-                  padding: "14px",
-                  border: "1px solid #d9dfd8",
-                  borderRadius: "10px",
-                  fontSize: "16px",
-                  marginBottom: "24px",
-                  background: "#fffdf9",
-                }}
-              >
-                <option value="family">Family</option>
-                <option value="friends">Friends</option>
-                <option value="places">Places</option>
-                <option value="events">Events</option>
-                <option value="food">Food</option>
-                <option value="travel">Travel</option>
-                <option value="other">Other</option>
-              </select>
-
-              <button
-                type="submit"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  padding: "15px",
-                  border: "none",
-                  borderRadius: "12px",
-                  background: "#57765f",
-                  color: "#ffffff",
-                  fontSize: "17px",
-                  fontWeight: "700",
-                  cursor: saving
-                    ? "not-allowed"
-                    : "pointer",
-                }}
-              >
-                {saving ? "Saving..." : "Save Memory"}
-              </button>
-            </form>
-
-            {message && (
-              <p
-                style={{
-                  marginTop: "18px",
-                  color: message.startsWith("✓")
-                    ? "#57765f"
-                    : "#a05a45",
-                  fontWeight: "700",
-                }}
-              >
-                {message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <h2
-              style={{
-                color: "#28352f",
-                marginTop: 0,
-                marginBottom: "20px",
-              }}
-            >
-              Saved Memories
-            </h2>
-
-            {loading ? (
-              <p style={{ color: "#66736b" }}>
-                Loading memories...
-              </p>
-            ) : memories.length === 0 ? (
-              <div
-                style={{
-                  background: "#fffdf9",
-                  border: "1px solid #e8e1d5",
-                  borderRadius: "20px",
-                  padding: "28px",
-                  color: "#66736b",
-                }}
-              >
-                No memories added yet.
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gap: "15px",
-                }}
-              >
-                {memories.map((memory) => {
-                  const game = games[memory.id];
-                  const gameMessage =
-                    gameMessages[memory.id];
-
-                  return (
-                    <div
-                      key={memory.id}
-                      style={{
-                        background: "#fffdf9",
-                        border: "1px solid #e8e1d5",
-                        borderRadius: "18px",
-                        padding: "22px",
-                      }}
-                    >
-                      <p
+                    return (
+                      <div
+                        className="memory-vault-memory-card"
+                        key={memory.id}
                         style={{
-                          margin: "0 0 7px",
-                          color: "#8a968e",
-                          fontSize: "12px",
-                          fontWeight: "700",
-                          textTransform: "uppercase",
-                          letterSpacing: "1px",
+                          background: "#fffdf9",
+                          border: "1px solid #e8e1d5",
+                          borderRadius: "18px",
+                          padding: "22px",
+                          minWidth: 0,
                         }}
                       >
-                        {memory.category || "Memory"}
-                      </p>
-
-                      <h3
-                        style={{
-                          margin: "0 0 10px",
-                          color: "#28352f",
-                          fontSize: "22px",
-                        }}
-                      >
-                        {memory.title}
-                      </h3>
-
-                      <p
-                        style={{
-                          margin: "0 0 16px",
-                          color: "#66736b",
-                          lineHeight: "1.6",
-                        }}
-                      >
-                        {memory.content}
-                      </p>
-
-                      {!game && (
-                        <button
-                          onClick={() =>
-                            generateGame(memory.id)
-                          }
-                          disabled={
-                            gameLoading === memory.id ||
-                            loadingLanguage
-                          }
-                          style={{
-                            padding: "12px 16px",
-                            border: "none",
-                            borderRadius: "10px",
-                            background: "#57765f",
-                            color: "#ffffff",
-                            fontSize: "14px",
-                            fontWeight: "700",
-                            cursor:
-                              gameLoading === memory.id ||
-                              loadingLanguage
-                                ? "not-allowed"
-                                : "pointer",
-                          }}
-                        >
-                          {gameLoading === memory.id
-                            ? "Creating game..."
-                            : loadingLanguage
-                            ? "Loading language..."
-                            : "Create Therapy Game →"}
-                        </button>
-                      )}
-
-                      {!game && gameMessage && (
                         <p
                           style={{
-                            margin: "14px 0 0",
-                            color: "#a05a45",
+                            margin: "0 0 7px",
+                            color: "#8a968e",
+                            fontSize: "12px",
                             fontWeight: "700",
+                            textTransform: "uppercase",
+                            letterSpacing: "1px",
                           }}
                         >
-                          {gameMessage}
+                          {memory.category || "Memory"}
                         </p>
-                      )}
 
-                      {game && (
-                        <div
+                        <h3
                           style={{
-                            marginTop: "18px",
-                            padding: "18px",
-                            borderRadius: "14px",
-                            background: "#f4f6f1",
+                            margin: "0 0 10px",
+                            color: "#28352f",
+                            fontSize: "22px",
+                            overflowWrap: "anywhere",
                           }}
                         >
+                          {memory.title}
+                        </h3>
+
+                        <p
+                          style={{
+                            margin: "0 0 16px",
+                            color: "#66736b",
+                            lineHeight: "1.6",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {memory.content}
+                        </p>
+
+                        {!game && (
+                          <button
+                            className="memory-vault-game-button"
+                            onClick={() =>
+                              generateGame(memory.id)
+                            }
+                            disabled={
+                              gameLoading === memory.id ||
+                              loadingLanguage
+                            }
+                            style={{
+                              cursor:
+                                gameLoading === memory.id ||
+                                loadingLanguage
+                                  ? "not-allowed"
+                                  : "pointer",
+                              opacity:
+                                gameLoading === memory.id ||
+                                loadingLanguage
+                                  ? 0.7
+                                  : 1,
+                            }}
+                          >
+                            {gameLoading === memory.id
+                              ? "Creating game..."
+                              : loadingLanguage
+                              ? "Loading language..."
+                              : "Create Therapy Game →"}
+                          </button>
+                        )}
+
+                        {!game && gameMessage && (
                           <p
                             style={{
-                              margin: "0 0 8px",
-                              color: "#8a968e",
-                              fontSize: "12px",
+                              margin: "14px 0 0",
+                              color: "#a05a45",
                               fontWeight: "700",
-                              textTransform: "uppercase",
+                              overflowWrap: "anywhere",
                             }}
                           >
-                            Personalized Game · {language}
+                            {gameMessage}
                           </p>
+                        )}
 
-                          <h4
-                            style={{
-                              margin: "0 0 15px",
-                              color: "#28352f",
-                              fontSize: "19px",
-                            }}
-                          >
-                            {game.question}
-                          </h4>
-
+                        {game && (
                           <div
+                            className="memory-vault-game"
                             style={{
-                              display: "grid",
-                              gap: "9px",
+                              marginTop: "18px",
+                              padding: "18px",
+                              borderRadius: "14px",
+                              background: "#f4f6f1",
                             }}
                           >
-                            {game.options?.map(
-                              (option, index) => (
-                                <button
-                                  key={index}
-                                  onClick={() =>
-                                    checkAnswer(
-                                      memory.id,
-                                      option
-                                    )
-                                  }
-                                  style={{
-                                    padding: "13px",
-                                    borderRadius: "10px",
-                                    border:
-                                      game.selectedAnswer ===
-                                      option
-                                        ? "2px solid #57765f"
-                                        : "1px solid #d9dfd8",
-                                    background:
-                                      game.selectedAnswer ===
-                                      option
-                                        ? "#edf3ed"
-                                        : "#fffdf9",
-                                    color: "#28352f",
-                                    fontSize: "15px",
-                                    cursor: "pointer",
-                                    textAlign: "left",
-                                  }}
-                                >
-                                  {option}
-                                </button>
-                              )
-                            )}
-                          </div>
-
-                          {gameMessage && (
                             <p
                               style={{
-                                margin: "14px 0 0",
-                                color:
-                                  gameMessage.startsWith("✓")
-                                    ? "#57765f"
-                                    : "#9a6a45",
+                                margin: "0 0 8px",
+                                color: "#8a968e",
+                                fontSize: "12px",
                                 fontWeight: "700",
+                                textTransform: "uppercase",
                               }}
                             >
-                              {gameMessage}
+                              Personalized Game · {language}
                             </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+
+                            <h4
+                              style={{
+                                margin: "0 0 15px",
+                                color: "#28352f",
+                                fontSize: "19px",
+                                lineHeight: "1.4",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {game.question}
+                            </h4>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gap: "9px",
+                              }}
+                            >
+                              {game.options?.map(
+                                (option, index) => (
+                                  <button
+                                    className="memory-vault-option"
+                                    key={index}
+                                    onClick={() =>
+                                      checkAnswer(
+                                        memory.id,
+                                        option
+                                      )
+                                    }
+                                    style={{
+                                      border:
+                                        game.selectedAnswer ===
+                                        option
+                                          ? "2px solid #57765f"
+                                          : "1px solid #d9dfd8",
+                                      background:
+                                        game.selectedAnswer ===
+                                        option
+                                          ? "#edf3ed"
+                                          : "#fffdf9",
+                                    }}
+                                  >
+                                    {option}
+                                  </button>
+                                )
+                              )}
+                            </div>
+
+                            {gameMessage && (
+                              <p
+                                style={{
+                                  margin: "14px 0 0",
+                                  color:
+                                    gameMessage.startsWith("✓")
+                                      ? "#57765f"
+                                      : "#9a6a45",
+                                  fontWeight: "700",
+                                  lineHeight: "1.5",
+                                  overflowWrap: "anywhere",
+                                }}
+                              >
+                                {gameMessage}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

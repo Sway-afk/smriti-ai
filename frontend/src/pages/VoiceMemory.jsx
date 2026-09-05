@@ -14,25 +14,43 @@ function VoiceMemory() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("smriti_token");
+
+    if (!token) {
+      throw new Error("Please log in again.");
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
   useEffect(() => {
     const loadPatientLanguage = async () => {
       try {
         const response = await fetch(
-          `${API_URL}/caregiver/dashboard/${PATIENT_ID}`
+          `${API_URL}/caregiver/dashboard/${PATIENT_ID}`,
+          {
+            headers: getAuthHeaders(),
+          }
         );
 
+        const data = await response.json();
+
         if (!response.ok) {
-          throw new Error("Could not load patient language.");
+          throw new Error(
+            data.detail || "Could not load patient language."
+          );
         }
 
-        const data = await response.json();
         const patientLanguage = data?.patient?.language;
 
         if (patientLanguage) {
           setLanguage(patientLanguage);
         }
       } catch (error) {
-        setMessage("Using English for voice transcription.");
+        setMessage(error.message);
       } finally {
         setLoadingLanguage(false);
       }
@@ -112,6 +130,7 @@ function VoiceMemory() {
         )}`,
         {
           method: "POST",
+          headers: getAuthHeaders(),
           body: formData,
         }
       );

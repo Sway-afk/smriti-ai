@@ -9,33 +9,126 @@ import VoiceMemory from "./pages/VoiceMemory";
 function App() {
   const [page, setPage] = useState("home");
 
+  const isAuthenticated = () => {
+    return Boolean(localStorage.getItem("smriti_token"));
+  };
+
+  const goToPage = (nextPage) => {
+    const protectedPages = [
+      "therapy",
+      "dashboard",
+      "memory-vault",
+      "voice-memory",
+    ];
+
+    if (protectedPages.includes(nextPage) && !isAuthenticated()) {
+      setPage("login");
+      return;
+    }
+
+    setPage(nextPage);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("smriti_token");
+    setPage("login");
+  };
+
+  const handleLoginSuccess = () => {
+    setPage("dashboard");
+  };
+
+  const renderPageWithBackButton = (
+    component,
+    backPage = "home",
+    backLabel = "Back"
+  ) => {
+    return (
+      <div style={{ minHeight: "100vh", position: "relative" }}>
+        <button
+          onClick={() => goToPage(backPage)}
+          style={{
+            position: "fixed",
+            top: "20px",
+            left: "20px",
+            zIndex: 1000,
+            padding: "11px 16px",
+            border: "1px solid #57765f",
+            borderRadius: "10px",
+            background: "#fffdf9",
+            color: "#57765f",
+            fontSize: "14px",
+            fontWeight: "700",
+            cursor: "pointer",
+            boxShadow: "0 6px 16px rgba(48, 59, 52, 0.08)",
+          }}
+        >
+          ← {backLabel}
+        </button>
+
+        {component}
+      </div>
+    );
+  };
+
+  /*
+   * Extra protection:
+   * Even if a protected page somehow gets selected while logged out,
+   * send the user to Login instead.
+   */
+  const protectedPages = [
+    "therapy",
+    "dashboard",
+    "memory-vault",
+    "voice-memory",
+  ];
+
+  if (protectedPages.includes(page) && !isAuthenticated()) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
   if (page === "therapy") {
-    return <Therapy />;
+    return renderPageWithBackButton(
+      <Therapy />,
+      "home",
+      "Home"
+    );
   }
 
   if (page === "login") {
     return (
       <Login
-        onLoginSuccess={() => setPage("dashboard")}
+        onLoginSuccess={handleLoginSuccess}
       />
     );
   }
 
   if (page === "dashboard") {
-    return (
+    return renderPageWithBackButton(
       <Dashboard
-        onOpenMemoryVault={() => setPage("memory-vault")}
-        onOpenVoiceMemory={() => setPage("voice-memory")}
-      />
+        onOpenMemoryVault={() => goToPage("memory-vault")}
+        onOpenVoiceMemory={() => goToPage("voice-memory")}
+        onLogout={handleLogout}
+      />,
+      "home",
+      "Home"
     );
   }
 
   if (page === "memory-vault") {
-    return <MemoryVault />;
+    return renderPageWithBackButton(
+      <MemoryVault />,
+      "dashboard",
+      "Dashboard"
+    );
   }
 
   if (page === "voice-memory") {
-    return <VoiceMemory />;
+    return renderPageWithBackButton(
+      <VoiceMemory />,
+      "dashboard",
+      "Dashboard"
+    );
   }
 
   return (
@@ -52,7 +145,7 @@ function App() {
 
         <button
           className="login-button"
-          onClick={() => setPage("login")}
+          onClick={() => goToPage("login")}
         >
           Caregiver Login
         </button>
@@ -85,21 +178,21 @@ function App() {
           >
             <button
               className="primary-button"
-              onClick={() => setPage("therapy")}
+              onClick={() => goToPage("therapy")}
             >
               Start a Therapy Session →
             </button>
 
             <button
               className="login-button"
-              onClick={() => setPage("memory-vault")}
+              onClick={() => goToPage("memory-vault")}
             >
               Open Memory Vault
             </button>
 
             <button
               className="login-button"
-              onClick={() => setPage("voice-memory")}
+              onClick={() => goToPage("voice-memory")}
             >
               Record a Voice Memory
             </button>
