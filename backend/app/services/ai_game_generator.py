@@ -5,11 +5,20 @@ import re
 def extract_memory_facts(content: str) -> list[dict]:
     """
     Extract explicit facts from a memory.
+
+    Supports:
+    - English
+    - Hindi
+    - Bengali
+    - Assamese
     """
 
     facts = []
     content_lower = content.lower()
 
+    # -------------------------
+    # Locations
+    # -------------------------
     locations = [
         "Jaipur",
         "Delhi",
@@ -35,70 +44,218 @@ def extract_memory_facts(content: str) -> list[dict]:
                 "value": location,
             })
 
-    relationships = [
-        "daughter",
-        "son",
-        "mother",
-        "father",
-        "brother",
-        "sister",
-        "friend",
-        "wife",
-        "husband",
-        "grandmother",
-        "grandfather",
-    ]
+    # -------------------------
+    # Relationships
+    # -------------------------
+    relationship_keywords = {
+        "daughter": [
+            "daughter",
+            "बेटी",
+            "बेटी की",
+            "জীয়েক",
+            "মেয়ে",
+            "মেয়",
+        ],
+        "son": [
+            "son",
+            "बेटा",
+            "बेटे",
+            "পুত্ৰ",
+            "ছেলে",
+        ],
+        "mother": [
+            "mother",
+            "माँ",
+            "मां",
+            "মাক",
+            "মা",
+        ],
+        "father": [
+            "father",
+            "पिता",
+            "पापा",
+            "দেউতা",
+            "বাবা",
+        ],
+        "brother": [
+            "brother",
+            "भाई",
+            "ভাই",
+        ],
+        "sister": [
+            "sister",
+            "बहन",
+            "ভনী",
+            "বোন",
+        ],
+        "friend": [
+            "friend",
+            "दोस्त",
+            "বন্ধু",
+        ],
+        "wife": [
+            "wife",
+            "पत्नी",
+            "স্ত্ৰী",
+            "স্ত্রী",
+        ],
+        "husband": [
+            "husband",
+            "पति",
+            "স্বামী",
+        ],
+        "grandmother": [
+            "grandmother",
+            "दादी",
+            "नानी",
+            "আইতা",
+            "দিদা",
+        ],
+        "grandfather": [
+            "grandfather",
+            "दादा",
+            "नाना",
+            "ককা",
+            "দাদু",
+        ],
+    }
 
-    for relationship in relationships:
-        if relationship.lower() in content_lower:
+    for relationship, keywords in relationship_keywords.items():
+        if any(keyword.lower() in content_lower for keyword in keywords):
             facts.append({
                 "type": "relationship",
                 "value": relationship,
             })
 
-    events = [
-        "wedding",
-        "birthday",
-        "festival",
-        "marriage",
-        "trip",
-        "holiday",
-    ]
+    # -------------------------
+    # Events
+    # -------------------------
+    event_keywords = {
+        "wedding": [
+            "wedding",
+            "शादी",
+            "विवाह",
+            "ब्याह",
+            "বিয়া",
+            "বিয়ে",
+        ],
+        "birthday": [
+            "birthday",
+            "जन्मदिन",
+            "জন্মদিন",
+        ],
+        "festival": [
+            "festival",
+            "त्योहार",
+            "उत्सव",
+            "उৎসৱ",
+        ],
+        "marriage": [
+            "marriage",
+            "विवाह",
+            "বিবাহ",
+        ],
+        "trip": [
+            "trip",
+            "यात्रा",
+            "ভ্ৰমণ",
+            "ভ্রমণ",
+        ],
+        "holiday": [
+            "holiday",
+            "छुट्टी",
+            "ছুটি",
+            "ছুটী",
+        ],
+    }
 
-    for event in events:
-        if event.lower() in content_lower:
+    for event, keywords in event_keywords.items():
+        if any(keyword.lower() in content_lower for keyword in keywords):
             facts.append({
                 "type": "event",
                 "value": event,
             })
 
-    activities = [
-        "tea",
-        "coffee",
-        "breakfast",
-        "lunch",
-        "dinner",
-        "walking",
-        "reading",
-        "singing",
-        "cooking",
-        "shopping",
-    ]
+    # -------------------------
+    # Activities
+    # -------------------------
+    activity_keywords = {
+        "tea": [
+            "tea",
+            "चाय",
+            "চা",
+            "চাহ",
+        ],
+        "coffee": [
+            "coffee",
+            "कॉफ़ी",
+            "कॉफी",
+            "কফি",
+        ],
+        "breakfast": [
+            "breakfast",
+            "नाश्ता",
+            "জলপান",
+        ],
+        "lunch": [
+            "lunch",
+            "दोपहर का खाना",
+            "দুপৰীয়া আহাৰ",
+        ],
+        "dinner": [
+            "dinner",
+            "रात का खाना",
+            "ৰাতিৰ আহাৰ",
+        ],
+        "walking": [
+            "walking",
+            "टहलना",
+            "चलना",
+            "খোজ কঢ়া",
+            "হাঁটা",
+        ],
+        "reading": [
+            "reading",
+            "पढ़ना",
+            "পঢ়া",
+            "পড়া",
+        ],
+        "singing": [
+            "singing",
+            "गाना",
+            "গান",
+        ],
+        "cooking": [
+            "cooking",
+            "खाना बनाना",
+            "ৰন্ধা",
+            "রান্না",
+        ],
+        "shopping": [
+            "shopping",
+            "खरीदारी",
+            "কিনা-কটা",
+            "কেনাকাটা",
+        ],
+    }
 
-    for activity in activities:
-        if activity.lower() in content_lower:
+    for activity, keywords in activity_keywords.items():
+        if any(keyword.lower() in content_lower for keyword in keywords):
             facts.append({
                 "type": "activity",
                 "value": activity,
             })
 
+    # -------------------------
+    # Person-name detection
+    # -------------------------
     known_words = {
         word.lower()
         for word in (
             locations
-            + relationships
-            + events
-            + activities
+            + list(relationship_keywords.keys())
+            + list(event_keywords.keys())
+            + list(activity_keywords.keys())
         )
     }
 
@@ -140,6 +297,8 @@ def extract_memory_facts(content: str) -> list[dict]:
         "memory",
     }
 
+    # Only use English-style capitalized words for person detection.
+    # Native-script names are intentionally not guessed as people.
     words = re.findall(
         r"\b[A-Z][a-zA-Z'-]+\b",
         content
@@ -177,7 +336,6 @@ def extract_memory_facts(content: str) -> list[dict]:
         })
 
     return facts
-
 
 def get_question_template(
     fact_type: str,
