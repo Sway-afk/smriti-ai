@@ -9,8 +9,12 @@ function Dashboard({
   onLogout,
 }) {
   const [dashboard, setDashboard] = useState(null);
+  const [memoryGraph, setMemoryGraph] = useState(null);
+
   const [loading, setLoading] = useState(true);
+  const [graphLoading, setGraphLoading] = useState(true);
   const [error, setError] = useState("");
+  const [graphError, setGraphError] = useState("");
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("smriti_token");
@@ -60,8 +64,45 @@ function Dashboard({
     }
   };
 
+  const loadMemoryGraph = async () => {
+    try {
+      setGraphLoading(true);
+      setGraphError("");
+
+      const response = await fetch(
+        `${API_URL}/memories/graph/${PATIENT_ID}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Could not load memory graph."
+        );
+      }
+
+      setMemoryGraph(data);
+    } catch (error) {
+      setGraphError(error.message);
+
+      if (
+        error.message === "Please log in again." ||
+        error.message.toLowerCase().includes("not authenticated") ||
+        error.message.toLowerCase().includes("unauthorized")
+      ) {
+        onLogout();
+      }
+    } finally {
+      setGraphLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadDashboard();
+    loadMemoryGraph();
   }, []);
 
   const patient = dashboard?.patient || {};
@@ -93,6 +134,65 @@ function Dashboard({
   const sessionProgress = Number(
     session?.progress_percent || 0
   );
+
+  const graphNodes = memoryGraph?.nodes || [];
+  const graphRelationships =
+    memoryGraph?.relationships || [];
+
+  const graphStats = memoryGraph?.stats || {};
+
+  const nodeMap = graphNodes.reduce((map, node) => {
+    map[node.id] = node;
+    return map;
+  }, {});
+
+  const graphConnections = graphRelationships
+    .filter(
+      (relationship) =>
+        relationship.type !== "shares_fact"
+    )
+    .map((relationship) => {
+      const source = nodeMap[relationship.source];
+      const target = nodeMap[relationship.target];
+
+      if (!source || !target) {
+        return null;
+      }
+
+      return {
+        source,
+        target,
+        type: relationship.type,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const formatRelationship = (type) => {
+    const labels = {
+      mentions_person: "mentions",
+      has_family_role: "has family role",
+      happened_at: "happened at",
+      describes_event: "describes",
+      includes_activity: "includes",
+      shares_fact: "shares a fact with",
+    };
+
+    return labels[type] || type.replaceAll("_", " ");
+  };
+
+  const getNodeIcon = (type) => {
+    const icons = {
+      memory: "🧠",
+      person: "👤",
+      family_role: "👨‍👩‍👧",
+      place: "📍",
+      event: "🎉",
+      activity: "☕",
+    };
+
+    return icons[type] || "•";
+  };
 
   if (loading) {
     return (
@@ -458,6 +558,85 @@ function Dashboard({
             line-height: 1.6;
           }
 
+          .memory-graph-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+          }
+
+          .memory-graph-stat {
+            padding: 14px;
+            background: #f4f6f1;
+            border-radius: 12px;
+            min-width: 0;
+          }
+
+          .memory-graph-stat-label {
+            margin: 0 0 5px;
+            color: #8a968e;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+
+          .memory-graph-stat-value {
+            margin: 0;
+            color: #28352f;
+            font-size: 20px;
+            font-weight: 700;
+          }
+
+          .memory-graph-connections {
+            display: grid;
+            gap: 10px;
+          }
+
+          .memory-graph-connection {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 12px;
+            border-radius: 12px;
+            background: #f8f6f1;
+          }
+
+          .memory-graph-node {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 10px;
+            border-radius: 999px;
+            background: #edf3ed;
+            color: #46634f;
+            font-size: 13px;
+            font-weight: 700;
+            max-width: 100%;
+          }
+
+          .memory-graph-node span:last-child {
+            overflow-wrap: anywhere;
+          }
+
+          .memory-graph-arrow {
+            color: #8a968e;
+            font-size: 13px;
+            font-weight: 700;
+          }
+
+          .memory-graph-loading {
+            color: #57765f;
+            font-weight: 700;
+          }
+
+          .memory-graph-error {
+            margin: 0;
+            color: #a05a45;
+            font-weight: 700;
+            line-height: 1.5;
+          }
+
           @media (max-width: 900px) {
             .dashboard-page {
               padding: 40px 5%;
@@ -521,6 +700,14 @@ function Dashboard({
               align-items: flex-start;
               flex-direction: column;
             }
+
+            .memory-graph-stats {
+              grid-template-columns: 1fr 1fr;
+            }
+
+            .memory-graph-connection {
+              align-items: flex-start;
+            }
           }
 
           @media (max-width: 390px) {
@@ -539,6 +726,10 @@ function Dashboard({
 
             .dashboard-title {
               font-size: 32px;
+            }
+
+            .memory-graph-stats {
+              grid-template-columns: 1fr;
             }
           }
         `}
@@ -598,7 +789,10 @@ function Dashboard({
               </p>
 
               <p className="dashboard-stat-value">
-                {accuracy.toFixed(accuracy % 1 ? 1 : 0)}%
+                {accuracy.toFixed(
+                  accuracy % 1 ? 1 : 0
+                )}
+                %
               </p>
             </div>
 
@@ -614,106 +808,258 @@ function Dashboard({
           </div>
 
           <div className="dashboard-main-grid">
-            <div className="dashboard-panel">
-              <h2 className="dashboard-panel-title">
-                Patient Overview
-              </h2>
+            <div>
+              <div className="dashboard-panel">
+                <h2 className="dashboard-panel-title">
+                  Patient Overview
+                </h2>
 
-              <div className="dashboard-patient-row">
-                <div className="dashboard-info-box">
-                  <p className="dashboard-info-label">
-                    Patient Name
-                  </p>
+                <div className="dashboard-patient-row">
+                  <div className="dashboard-info-box">
+                    <p className="dashboard-info-label">
+                      Patient Name
+                    </p>
 
-                  <p className="dashboard-info-value">
-                    {patient.full_name || "Test Patient"}
-                  </p>
+                    <p className="dashboard-info-value">
+                      {patient.full_name || "Test Patient"}
+                    </p>
+                  </div>
+
+                  <div className="dashboard-info-box">
+                    <p className="dashboard-info-label">
+                      Age
+                    </p>
+
+                    <p className="dashboard-info-value">
+                      {patient.age
+                        ? `${patient.age} years`
+                        : "Not available"}
+                    </p>
+                  </div>
+
+                  <div className="dashboard-info-box">
+                    <p className="dashboard-info-label">
+                      Language
+                    </p>
+
+                    <p className="dashboard-info-value">
+                      {patient.language || "English"}
+                    </p>
+                  </div>
+
+                  <div className="dashboard-info-box">
+                    <p className="dashboard-info-label">
+                      Caregiver
+                    </p>
+
+                    <p className="dashboard-info-value">
+                      {patient.caregiver_name ||
+                        "Test Caregiver"}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="dashboard-info-box">
-                  <p className="dashboard-info-label">
-                    Age
-                  </p>
+                <div className="dashboard-activity">
+                  <h3
+                    style={{
+                      margin: "0 0 14px",
+                      color: "#28352f",
+                      fontSize: "18px",
+                    }}
+                  >
+                    Recent Activity
+                  </h3>
 
-                  <p className="dashboard-info-value">
-                    {patient.age
-                      ? `${patient.age} years`
-                      : "Not available"}
-                  </p>
-                </div>
+                  {recentActivity.length === 0 ? (
+                    <p className="dashboard-empty">
+                      No recent activity yet.
+                    </p>
+                  ) : (
+                    <div className="dashboard-activity-list">
+                      {recentActivity
+                        .slice(0, 5)
+                        .map((activity, index) => (
+                          <div
+                            className="dashboard-activity-item"
+                            key={
+                              activity.id ??
+                              activity.attempt_id ??
+                              index
+                            }
+                          >
+                            <div className="dashboard-activity-icon">
+                              {activity.correct ? "✓" : "🧠"}
+                            </div>
 
-                <div className="dashboard-info-box">
-                  <p className="dashboard-info-label">
-                    Language
-                  </p>
+                            <div className="dashboard-activity-content">
+                              <p className="dashboard-activity-title">
+                                {activity.game_type ||
+                                  activity.type ||
+                                  "Therapy activity"}
+                              </p>
 
-                  <p className="dashboard-info-value">
-                    {patient.language || "English"}
-                  </p>
-                </div>
-
-                <div className="dashboard-info-box">
-                  <p className="dashboard-info-label">
-                    Caregiver
-                  </p>
-
-                  <p className="dashboard-info-value">
-                    {patient.caregiver_name ||
-                      "Test Caregiver"}
-                  </p>
+                              <p className="dashboard-activity-text">
+                                {activity.correct
+                                  ? "Correct answer"
+                                  : activity.score !== undefined
+                                  ? `Score: ${activity.score}`
+                                  : "Activity completed"}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="dashboard-activity">
-                <h3
+              <div
+                className="dashboard-panel"
+                style={{ marginTop: "25px" }}
+              >
+                <h2 className="dashboard-panel-title">
+                  Memory Connections
+                </h2>
+
+                <p
                   style={{
-                    margin: "0 0 14px",
-                    color: "#28352f",
-                    fontSize: "18px",
+                    margin: "-8px 0 20px",
+                    color: "#66736b",
+                    lineHeight: "1.6",
                   }}
                 >
-                  Recent Activity
-                </h3>
+                  Smriti AI connects memories with the people,
+                  places, events, family roles, and activities
+                  that make them meaningful.
+                </p>
 
-                {recentActivity.length === 0 ? (
-                  <p className="dashboard-empty">
-                    No recent activity yet.
+                {graphLoading ? (
+                  <p className="memory-graph-loading">
+                    Building memory connections...
+                  </p>
+                ) : graphError ? (
+                  <p className="memory-graph-error">
+                    {graphError}
                   </p>
                 ) : (
-                  <div className="dashboard-activity-list">
-                    {recentActivity
-                      .slice(0, 5)
-                      .map((activity, index) => (
-                        <div
-                          className="dashboard-activity-item"
-                          key={
-                            activity.id ??
-                            activity.attempt_id ??
-                            index
-                          }
-                        >
-                          <div className="dashboard-activity-icon">
-                            {activity.correct ? "✓" : "🧠"}
-                          </div>
+                  <>
+                    <div className="memory-graph-stats">
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Memories
+                        </p>
 
-                          <div className="dashboard-activity-content">
-                            <p className="dashboard-activity-title">
-                              {activity.game_type ||
-                                activity.type ||
-                                "Therapy activity"}
-                            </p>
+                        <p className="memory-graph-stat-value">
+                          {graphStats.memory_count ??
+                            0}
+                        </p>
+                      </div>
 
-                            <p className="dashboard-activity-text">
-                              {activity.correct
-                                ? "Correct answer"
-                                : activity.score !== undefined
-                                ? `Score: ${activity.score}`
-                                : "Activity completed"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Places
+                        </p>
+
+                        <p className="memory-graph-stat-value">
+                          {graphStats.place_count ??
+                            0}
+                        </p>
+                      </div>
+
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Events
+                        </p>
+
+                        <p className="memory-graph-stat-value">
+                          {graphStats.event_count ??
+                            0}
+                        </p>
+                      </div>
+
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Activities
+                        </p>
+
+                        <p className="memory-graph-stat-value">
+                          {graphStats.activity_count ??
+                            0}
+                        </p>
+                      </div>
+
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Family Roles
+                        </p>
+
+                        <p className="memory-graph-stat-value">
+                          {graphStats.family_role_count ??
+                            graphStats.relationship_count ??
+                            0}
+                        </p>
+                      </div>
+
+                      <div className="memory-graph-stat">
+                        <p className="memory-graph-stat-label">
+                          Connections
+                        </p>
+
+                        <p className="memory-graph-stat-value">
+                          {graphStats.connection_count ??
+                            0}
+                        </p>
+                      </div>
+                    </div>
+
+                    {graphConnections.length === 0 ? (
+                      <p className="dashboard-empty">
+                        Add more detailed memories to build
+                        stronger connections.
+                      </p>
+                    ) : (
+                      <div className="memory-graph-connections">
+                        {graphConnections.map(
+                          (connection, index) => (
+                            <div
+                              className="memory-graph-connection"
+                              key={`${connection.source.id}-${connection.target.id}-${index}`}
+                            >
+                              <div className="memory-graph-node">
+                                <span>
+                                  {getNodeIcon(
+                                    connection.source.type
+                                  )}
+                                </span>
+
+                                <span>
+                                  {connection.source.value}
+                                </span>
+                              </div>
+
+                              <span className="memory-graph-arrow">
+                                {formatRelationship(
+                                  connection.type
+                                )} →
+                              </span>
+
+                              <div className="memory-graph-node">
+                                <span>
+                                  {getNodeIcon(
+                                    connection.target.type
+                                  )}
+                                </span>
+
+                                <span>
+                                  {connection.target.value}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -748,7 +1094,10 @@ function Dashboard({
                         fontWeight: "700",
                       }}
                     >
-                      {accuracy.toFixed(accuracy % 1 ? 1 : 0)}%
+                      {accuracy.toFixed(
+                        accuracy % 1 ? 1 : 0
+                      )}
+                      %
                     </div>
                   </div>
 
@@ -824,6 +1173,7 @@ function Dashboard({
                         margin: "10px 0 0",
                         color: "#57765f",
                         fontWeight: "700",
+                        textTransform: "capitalize",
                       }}
                     >
                       {session.status || "active"}

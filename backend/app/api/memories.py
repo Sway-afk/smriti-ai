@@ -5,6 +5,7 @@ from app.database.database import get_db
 from app.models.memory import Memory
 from app.models.user import User
 from app.schemas.memory import MemoryCreate, MemoryUpdate, MemoryResponse
+from app.services.memory_graph import build_patient_memory_graph
 from app.utils.roles import require_doctor_or_caregiver
 
 
@@ -57,6 +58,31 @@ def get_memories(
         )
 
     return query.offset(skip).limit(limit).all()
+
+
+@router.get("/graph/{patient_id}")
+def get_memory_graph(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
+    memories = (
+        db.query(Memory)
+        .filter(Memory.patient_id == patient_id)
+        .all()
+    )
+
+    memory_data = [
+        {
+            "id": memory.id,
+            "title": memory.title,
+            "content": memory.content,
+            "category": memory.category,
+        }
+        for memory in memories
+    ]
+
+    return build_patient_memory_graph(memory_data)
 
 
 @router.get("/{memory_id}", response_model=MemoryResponse)

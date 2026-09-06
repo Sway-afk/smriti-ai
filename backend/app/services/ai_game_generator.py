@@ -833,10 +833,10 @@ def generate_true_false_game(
 
     if is_true:
         statement = true_statement
-        answer = "True"
+        answer_key = "true"
     else:
         statement = false_statement
-        answer = "False"
+        answer_key = "false"
 
     translated_options = {
         "english": [
@@ -861,6 +861,8 @@ def generate_true_false_game(
         language.lower(),
         translated_options["english"]
     )
+
+    answer = options[0] if answer_key == "true" else options[1]
 
     return {
         "game_type": "true_false",
@@ -904,6 +906,289 @@ def generate_fill_blank_game(
     }
 
 
+
+def _get_facts_by_type(facts: list[dict], fact_type: str) -> list[dict]:
+    """Return facts of a requested type."""
+    return [fact for fact in facts if fact.get("type") == fact_type]
+
+
+def _pick_fact(facts: list[dict], preferred_types: list[str]) -> dict:
+    """Pick a fact from preferred types, falling back to any explicit fact."""
+    for fact_type in preferred_types:
+        candidates = _get_facts_by_type(facts, fact_type)
+        if candidates:
+            return random.choice(candidates)
+    return random.choice(facts)
+
+
+def get_attention_options(facts: list[dict], answer: str) -> list[str]:
+    """Build short, concrete options for an attention challenge."""
+    values = []
+    seen = set()
+
+    for fact in facts:
+        value = str(fact.get("value", "")).strip()
+        if value and value.lower() not in seen:
+            values.append(value)
+            seen.add(value.lower())
+
+    distractors = [
+        "morning", "evening", "Sunday", "Monday",
+        "market", "school", "garden", "park", "tea", "coffee",
+    ]
+
+    for value in distractors:
+        if value.lower() != answer.lower() and value.lower() not in seen:
+            values.append(value)
+            seen.add(value.lower())
+        if len(values) >= 4:
+            break
+
+    if answer.lower() not in {value.lower() for value in values}:
+        values.insert(0, answer)
+
+    random.shuffle(values)
+    return values[:4]
+
+
+def generate_attention_game(
+    facts: list[dict],
+    difficulty: str,
+    language: str,
+) -> dict:
+    """Generate an attention/concentration challenge from memory facts."""
+    fact = _pick_fact(
+        facts,
+        ["person", "location", "relationship", "event", "activity"],
+    )
+
+    questions = {
+        "english": "Look carefully at the memory. Which detail is mentioned?",
+        "hindi": "याद को ध्यान से देखें। इनमें से कौन-सी बात याद में बताई गई है?",
+        "bengali": "স্মৃতিটা মন দিয়ে দেখুন। কোন কথাটি এই স্মৃতিতে আছে?",
+        "assamese": "স্মৃতিটো মন দি চাওক। কোন কথাটো এই স্মৃতিত আছে?",
+    }
+
+    question = questions.get(language.lower(), questions["english"])
+    options = get_attention_options(facts, fact["value"])
+    translated_options = translate_options(options, language)
+    answer_index = options.index(fact["value"])
+
+    return {
+        "game_type": "attention",
+        "question": question,
+        "options": translated_options,
+        "difficulty": difficulty,
+        "answer": translated_options[answer_index],
+        "memory_fact": {"type": fact["type"], "value": fact["value"]},
+    }
+
+
+def generate_routine_recall_game(
+    facts: list[dict],
+    difficulty: str,
+    language: str,
+) -> dict:
+    """Generate a daily-routine recall question from an activity fact."""
+    activity_facts = _get_facts_by_type(facts, "activity")
+    fact = random.choice(activity_facts) if activity_facts else _pick_fact(
+        facts,
+        ["location", "event", "relationship"],
+    )
+
+    questions = {
+        "english": "Which familiar activity was part of this memory?",
+        "hindi": "इस याद में कौन-सी परिचित गतिविधि थी?",
+        "bengali": "এই স্মৃতিতে কোন পরিচিত কাজটি ছিল?",
+        "assamese": "এই স্মৃতিত কোন চিনাকি কাৰ্যকলাপ আছিল?",
+    }
+
+    question = questions.get(language.lower(), questions["english"])
+    options = get_distractors(fact["type"], fact["value"])
+    translated_options = translate_options(options, language)
+    answer_index = options.index(fact["value"])
+
+    return {
+        "game_type": "routine_recall",
+        "question": question,
+        "options": translated_options,
+        "difficulty": difficulty,
+        "answer": translated_options[answer_index],
+        "memory_fact": {"type": fact["type"], "value": fact["value"]},
+    }
+
+
+def generate_pattern_recognition_game(
+    facts: list[dict],
+    difficulty: str,
+    language: str,
+) -> dict:
+    """Generate a simple ordered memory-pattern game."""
+    sequence = []
+
+    for fact_type in ["location", "relationship", "event", "activity", "person"]:
+        matches = _get_facts_by_type(facts, fact_type)
+        if matches:
+            sequence.append(matches[0]["value"])
+
+    if not sequence:
+        sequence = [facts[0]["value"]]
+
+    if len(sequence) == 1:
+        sequence.append(sequence[0])
+
+    pattern = [translate_value(value, language) for value in sequence[:3]]
+    answer_source = sequence[-1]
+    answer = translate_value(answer_source, language)
+
+    distractors = get_distractors(facts[-1]["type"], answer_source)
+    options = [answer] + [
+        value for value in translate_options(distractors, language)
+        if value.lower() != answer.lower()
+    ]
+    options = list(dict.fromkeys(options))[:4]
+
+    while len(options) < 4:
+        options.append("Not sure")
+
+    random.shuffle(options)
+
+    questions = {
+        "english": f"Complete the memory pattern: {' → '.join(pattern[:-1])} → ____",
+        "hindi": f"याद के क्रम को पूरा करें: {' → '.join(pattern[:-1])} → ____",
+        "bengali": f"স্মৃতির ধারাটি পূরণ করুন: {' → '.join(pattern[:-1])} → ____",
+        "assamese": f"স্মৃতিৰ ক্ৰমটো সম্পূৰ্ণ কৰক: {' → '.join(pattern[:-1])} → ____",
+    }
+
+    question = questions.get(language.lower(), questions["english"])
+
+    return {
+        "game_type": "pattern_recognition",
+        "question": question,
+        "options": options,
+        "difficulty": difficulty,
+        "answer": answer,
+        "memory_fact": {"type": facts[-1]["type"], "value": answer_source},
+    }
+
+
+def generate_object_recognition_game(
+    facts: list[dict],
+    difficulty: str,
+    language: str,
+) -> dict:
+    """Generate an object/familiar-item recognition game."""
+    object_like = [
+        fact for fact in facts
+        if fact.get("type") in {"activity", "location"}
+    ]
+    fact = random.choice(object_like) if object_like else random.choice(facts)
+
+    object_options = [
+        "tea", "coffee", "book", "chair",
+        "garden", "home", "market", "park",
+    ]
+
+    options = [fact["value"]]
+    seen = {fact["value"].lower()}
+
+    for item in object_options:
+        if item.lower() not in seen:
+            options.append(item)
+            seen.add(item.lower())
+        if len(options) >= 4:
+            break
+
+    translated_options = translate_options(options, language)
+    answer_index = options.index(fact["value"])
+
+    questions = {
+        "english": "Which familiar item or place is part of this memory?",
+        "hindi": "इस याद में कौन-सी परिचित चीज़ या जगह है?",
+        "bengali": "এই স্মৃতিতে কোন পরিচিত জিনিস বা স্থান আছে?",
+        "assamese": "এই স্মৃতিত কোন চিনাকি বস্তু বা ঠাই আছে?",
+    }
+
+    question = questions.get(language.lower(), questions["english"])
+
+    return {
+        "game_type": "object_recognition",
+        "question": question,
+        "options": translated_options,
+        "difficulty": difficulty,
+        "answer": translated_options[answer_index],
+        "memory_fact": {"type": fact["type"], "value": fact["value"]},
+    }
+
+
+def generate_emotional_engagement_game(
+    memory: dict,
+    facts: list[dict],
+    difficulty: str,
+    language: str,
+) -> dict:
+    """Generate a gentle personal-engagement question tied to the memory."""
+    category = str(memory.get("category", "")).lower()
+    relationship_facts = _get_facts_by_type(facts, "relationship")
+    event_facts = _get_facts_by_type(facts, "event")
+
+    if category == "family" and not relationship_facts:
+        fact = {"type": "relationship", "value": "family"}
+        options = translate_options(
+            ["family", "friend", "school", "market"],
+            language,
+        )
+        answer = translate_value("family", language)
+    elif relationship_facts:
+        fact = random.choice(relationship_facts)
+        answer = translate_value(fact["value"], language)
+        options = translate_options(
+            get_distractors("relationship", fact["value"]),
+            language,
+        )
+    elif event_facts:
+        fact = random.choice(event_facts)
+        answer = translate_value(fact["value"], language)
+        options = translate_options(
+            get_distractors("event", fact["value"]),
+            language,
+        )
+    else:
+        fact = _pick_fact(facts, ["activity", "location", "person"])
+        answer = translate_value(fact["value"], language)
+        options = translate_options(
+            get_distractors(fact["type"], fact["value"]),
+            language,
+        )
+
+    questions = {
+        "english": "Which part of this memory may feel personally meaningful?",
+        "hindi": "इस याद का कौन-सा हिस्सा आपके लिए खास हो सकता है?",
+        "bengali": "এই স্মৃতির কোন অংশটি আপনার কাছে বিশেষ মনে হতে পারে?",
+        "assamese": "এই স্মৃতিৰ কোনটো অংশ আপোনাৰ বাবে বিশেষ হ'ব পাৰে?",
+    }
+
+    question = questions.get(language.lower(), questions["english"])
+
+    if answer.lower() not in {value.lower() for value in options}:
+        options.insert(0, answer)
+
+    options = list(dict.fromkeys(options))[:4]
+    while len(options) < 4:
+        options.append("Not sure")
+
+    random.shuffle(options)
+
+    return {
+        "game_type": "emotional_engagement",
+        "question": question,
+        "options": options,
+        "difficulty": difficulty,
+        "answer": answer,
+        "memory_fact": {"type": fact["type"], "value": fact["value"]},
+    }
+
+
 def generate_ai_game(memory: dict) -> dict:
     """
     Generate a personalized game.
@@ -912,6 +1197,11 @@ def generate_ai_game(memory: dict) -> dict:
     - multiple_choice
     - true_false
     - fill_blank
+    - attention
+    - routine_recall
+    - pattern_recognition
+    - object_recognition
+    - emotional_engagement
     """
 
     content = memory.get(
@@ -962,6 +1252,42 @@ def generate_ai_game(memory: dict) -> dict:
     if requested_game_type == "fill_blank":
         return generate_fill_blank_game(
             fact=fact,
+            difficulty=difficulty,
+            language=language
+        )
+
+    if requested_game_type == "attention":
+        return generate_attention_game(
+            facts=facts,
+            difficulty=difficulty,
+            language=language
+        )
+
+    if requested_game_type == "routine_recall":
+        return generate_routine_recall_game(
+            facts=facts,
+            difficulty=difficulty,
+            language=language
+        )
+
+    if requested_game_type == "pattern_recognition":
+        return generate_pattern_recognition_game(
+            facts=facts,
+            difficulty=difficulty,
+            language=language
+        )
+
+    if requested_game_type == "object_recognition":
+        return generate_object_recognition_game(
+            facts=facts,
+            difficulty=difficulty,
+            language=language
+        )
+
+    if requested_game_type == "emotional_engagement":
+        return generate_emotional_engagement_game(
+            memory=memory,
+            facts=facts,
             difficulty=difficulty,
             language=language
         )

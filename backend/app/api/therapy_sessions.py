@@ -59,6 +59,8 @@ def start_therapy_session(
         "completed_games": session.completed_games,
         "started_at": session.started_at,
     }
+
+
 @router.post("/daily/{patient_id}")
 def create_daily_therapy_session(
     patient_id: int,
@@ -74,35 +76,34 @@ def create_daily_therapy_session(
     if patient is None:
         raise HTTPException(
             status_code=404,
-            detail="Patient not found"
+            detail="Patient not found",
         )
 
     patient_language = patient.language or "English"
 
     recommended_difficulty = get_recommended_difficulty(
         patient_id=patient_id,
-        db=db
+        db=db,
     )
 
     memories = (
         db.query(Memory)
         .filter(Memory.patient_id == patient_id)
         .order_by(Memory.created_at.desc())
-        .limit(3)
         .all()
     )
 
     if not memories:
         raise HTTPException(
             status_code=404,
-            detail="No memories found for this patient"
+            detail="No memories found for this patient",
         )
 
     session = TherapySession(
         patient_id=patient_id,
         status="active",
         total_games=0,
-        completed_games=0
+        completed_games=0,
     )
 
     db.add(session)
@@ -110,19 +111,66 @@ def create_daily_therapy_session(
 
     created_games = []
 
-    for memory in memories:
+    # Five different cognitive abilities in one daily session.
+    # Each game is still personalized from the patient's memories.
+    game_plan = [
+        ("multiple_choice", 0),
+        ("attention", 1),
+        ("routine_recall", 2),
+        ("pattern_recognition", 0),
+        ("emotional_engagement", 1),
+    ]
+
+    # Use up to the first three most recent memories.
+    usable_memories = memories[:3]
+
+    for game_type, memory_index in game_plan:
+        memory = usable_memories[
+            memory_index % len(usable_memories)
+        ]
+
         memory_data = {
             "id": memory.id,
             "title": memory.title,
             "content": memory.content,
             "difficulty": recommended_difficulty,
-            "language": patient_language
+            "language": patient_language,
+            "game_type": game_type,
         }
 
         try:
             game = generate_ai_game(memory_data)
+
         except ValueError:
-            continue
+            # Try another memory for the same cognitive game type.
+            game_created = False
+
+            for fallback_memory in usable_memories:
+                if fallback_memory.id == memory.id:
+                    continue
+
+                fallback_data = {
+                    "id": fallback_memory.id,
+                    "title": fallback_memory.title,
+                    "content": fallback_memory.content,
+                    "difficulty": recommended_difficulty,
+                    "language": patient_language,
+                    "game_type": game_type,
+                }
+
+                try:
+                    game = generate_ai_game(
+                        fallback_data
+                    )
+                    memory = fallback_memory
+                    game_created = True
+                    break
+
+                except ValueError:
+                    continue
+
+            if not game_created:
+                continue
 
         generated_game = GeneratedGame(
             memory_id=memory.id,
@@ -131,7 +179,7 @@ def create_daily_therapy_session(
             options=json.dumps(game["options"]),
             answer=game["answer"],
             difficulty=game["difficulty"],
-            language=patient_language
+            language=patient_language,
         )
 
         db.add(generated_game)
@@ -140,14 +188,16 @@ def create_daily_therapy_session(
         session_game = SessionGame(
             session_id=session.id,
             game_id=generated_game.id,
-            completed=False
+            completed=False,
         )
 
         db.add(session_game)
+
         session.total_games += 1
 
         created_games.append(
             {
+                "question_number": session.total_games,
                 "game_id": generated_game.id,
                 "memory_id": memory.id,
                 "memory_title": memory.title,
@@ -155,14 +205,20 @@ def create_daily_therapy_session(
                 "question": generated_game.question,
                 "options": game["options"],
                 "difficulty": generated_game.difficulty,
+                "language": patient_language,
             }
         )
 
-    if session.total_games == 0:
+    # A daily therapy session must contain all five questions.
+    if session.total_games != 5:
         db.rollback()
+
         raise HTTPException(
             status_code=400,
-            detail="Could not generate games from the patient's memories"
+            detail=(
+                "Could not generate the complete 5-question "
+                "cognitive therapy session from the patient's memories"
+            ),
         )
 
     db.commit()
@@ -175,6 +231,7 @@ def create_daily_therapy_session(
         "difficulty": recommended_difficulty,
         "total_games": session.total_games,
         "completed_games": session.completed_games,
+        "question_count": len(created_games),
         "language": patient_language,
         "games": created_games,
         "started_at": session.started_at,
@@ -201,13 +258,17 @@ def get_patient_therapy_sessions(
             "status": session.status,
             "total_games": session.total_games,
             "completed_games": session.completed_games,
-            "progress_percent": round(
-                (
-                    session.completed_games
-                    / session.total_games
-                ) * 100,
-                2,
-            ) if session.total_games > 0 else 0,
+            "progress_percent": (
+                round(
+                    (
+                        session.completed_games
+                        / session.total_games
+                    ) * 100,
+                    2,
+                )
+                if session.total_games > 0
+                else 0
+            ),
             "started_at": session.started_at,
             "completed_at": session.completed_at,
         }
@@ -353,7 +414,9 @@ def complete_session_game(
 
         if session.completed_games >= session.total_games:
             session.status = "completed"
-            session.completed_at = datetime.now(timezone.utc)
+            session.completed_at = datetime.now(
+                timezone.utc
+            )
 
         db.commit()
 

@@ -35,16 +35,25 @@ def generate_game(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor_or_caregiver),
 ):
-    if game_type not in {
+    supported_game_types = {
         "multiple_choice",
         "true_false",
-        "fill_blank"
-    }:
+        "fill_blank",
+        "attention",
+        "routine_recall",
+        "pattern_recognition",
+        "object_recognition",
+        "emotional_engagement",
+    }
+
+    if game_type not in supported_game_types:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Unsupported game type. Use multiple_choice, "
-                "true_false, or fill_blank."
+                "Unsupported game type. Use one of: "
+                "multiple_choice, true_false, fill_blank, attention, "
+                "routine_recall, pattern_recognition, object_recognition, "
+                "emotional_engagement."
             )
         )
 
