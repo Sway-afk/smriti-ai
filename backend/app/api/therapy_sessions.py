@@ -141,7 +141,11 @@ def create_daily_therapy_session(
         try:
             game = generate_ai_game(memory_data)
 
-        except ValueError:
+        except ValueError as error:
+            print(
+    f"Game generation failed: "
+    f"type={game_type}, memory_id={memory.id}, error={error}"
+)
             # Try another memory for the same cognitive game type.
             game_created = False
 

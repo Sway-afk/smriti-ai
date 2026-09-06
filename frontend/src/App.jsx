@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
 import Therapy from "./pages/Therapy";
 import Login from "./pages/Login";
@@ -8,6 +8,71 @@ import VoiceMemory from "./pages/VoiceMemory";
 
 function App() {
   const [page, setPage] = useState("home");
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkInternetConnection = async () => {
+      if (!navigator.onLine) {
+        if (mounted) {
+          setIsOnline(false);
+        }
+        return;
+      }
+
+      try {
+        await fetch(
+          `https://www.google.com/favicon.ico?smriti=${Date.now()}`,
+          {
+            method: "GET",
+            mode: "no-cors",
+            cache: "no-store",
+          }
+        );
+
+        if (mounted) {
+          setIsOnline(true);
+        }
+      } catch {
+        if (mounted) {
+          setIsOnline(false);
+        }
+      }
+    };
+
+    checkInternetConnection();
+
+    const intervalId = window.setInterval(
+      checkInternetConnection,
+      5000
+    );
+
+    window.addEventListener(
+      "online",
+      checkInternetConnection
+    );
+
+    window.addEventListener(
+      "offline",
+      checkInternetConnection
+    );
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener(
+        "online",
+        checkInternetConnection
+      );
+      window.removeEventListener(
+        "offline",
+        checkInternetConnection
+      );
+    };
+  }, []);
 
   const isAuthenticated = () => {
     return Boolean(localStorage.getItem("smriti_token"));
@@ -38,6 +103,35 @@ function App() {
     setPage("dashboard");
   };
 
+  const renderOfflineBanner = () => {
+    if (isOnline) {
+      return null;
+    }
+
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 5000,
+          padding: "10px 16px",
+          background: "#fff1d8",
+          borderBottom: "1px solid #e4c98c",
+          color: "#6d5420",
+          textAlign: "center",
+          fontSize: "14px",
+          fontWeight: "700",
+          boxShadow: "0 4px 12px rgba(48, 59, 52, 0.08)",
+        }}
+      >
+        📴 You are offline. Cached app content is available, but
+        some caregiver features need an internet connection.
+      </div>
+    );
+  };
+
   const renderPageWithBackButton = (
     component,
     backPage = "home",
@@ -45,11 +139,13 @@ function App() {
   ) => {
     return (
       <div style={{ minHeight: "100vh", position: "relative" }}>
+        {renderOfflineBanner()}
+
         <button
           onClick={() => goToPage(backPage)}
           style={{
             position: "fixed",
-            top: "20px",
+            top: isOnline ? "20px" : "58px",
             left: "20px",
             zIndex: 1000,
             padding: "11px 16px",
@@ -71,11 +167,6 @@ function App() {
     );
   };
 
-  /*
-   * Extra protection:
-   * Even if a protected page somehow gets selected while logged out,
-   * send the user to Login instead.
-   */
   const protectedPages = [
     "therapy",
     "dashboard",
@@ -84,7 +175,12 @@ function App() {
   ];
 
   if (protectedPages.includes(page) && !isAuthenticated()) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <>
+        {renderOfflineBanner()}
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </>
+    );
   }
 
   if (page === "therapy") {
@@ -97,9 +193,10 @@ function App() {
 
   if (page === "login") {
     return (
-      <Login
-        onLoginSuccess={handleLoginSuccess}
-      />
+      <>
+        {renderOfflineBanner()}
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </>
     );
   }
 
@@ -133,7 +230,14 @@ function App() {
 
   return (
     <div className="app">
-      <header className="navbar">
+      {renderOfflineBanner()}
+
+      <header
+        className="navbar"
+        style={{
+          paddingTop: isOnline ? undefined : "48px",
+        }}
+      >
         <div className="brand">
           <div className="brand-logo">स्मृति</div>
 

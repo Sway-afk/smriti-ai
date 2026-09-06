@@ -32,8 +32,23 @@ function MemoryVault() {
     };
   };
 
+  const handleAuthError = (error) => {
+    const text = String(error?.message || "").toLowerCase();
+
+    if (
+      text === "please log in again." ||
+      text.includes("not authenticated") ||
+      text.includes("unauthorized") ||
+      text.includes("could not validate credentials")
+    ) {
+      window.location.reload();
+    }
+  };
+
   const loadMemories = async () => {
     try {
+      setLoading(true);
+
       const response = await fetch(
         `${API_URL}/memories/?patient_id=${PATIENT_ID}`,
         {
@@ -49,9 +64,10 @@ function MemoryVault() {
         );
       }
 
-      setMemories(data);
+      setMemories(Array.isArray(data) ? data : []);
     } catch (error) {
       setMessage(error.message);
+      handleAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -59,6 +75,8 @@ function MemoryVault() {
 
   const loadPatientLanguage = async () => {
     try {
+      setLoadingLanguage(true);
+
       const response = await fetch(
         `${API_URL}/caregiver/dashboard/${PATIENT_ID}`,
         {
@@ -70,11 +88,13 @@ function MemoryVault() {
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Could not load patient language."
+          data.detail ||
+            "Could not load patient language."
         );
       }
 
-      const patientLanguage = data?.patient?.language;
+      const patientLanguage =
+        data?.patient?.language;
 
       if (patientLanguage) {
         setLanguage(patientLanguage);
@@ -82,6 +102,7 @@ function MemoryVault() {
     } catch (error) {
       setMessage(error.message);
       setLanguage("English");
+      handleAuthError(error);
     } finally {
       setLoadingLanguage(false);
     }
@@ -95,39 +116,58 @@ function MemoryVault() {
   const saveMemory = async (event) => {
     event.preventDefault();
 
+    if (!title.trim() || !content.trim()) {
+      setMessage(
+        "Please add both a title and memory."
+      );
+      return;
+    }
+
     setSaving(true);
     setMessage("");
 
     try {
-      const response = await fetch(`${API_URL}/memories/`, {
-        method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          patient_id: PATIENT_ID,
-          title,
-          content,
-          category,
-        }),
-      });
+      const response = await fetch(
+        `${API_URL}/memories/`,
+        {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            patient_id: PATIENT_ID,
+            title: title.trim(),
+            content: content.trim(),
+            category,
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Could not save memory."
+          data.detail ||
+            "Could not save memory."
         );
       }
 
-      setMemories((current) => [data, ...current]);
+      setMemories((current) => [
+        data,
+        ...current,
+      ]);
+
       setTitle("");
       setContent("");
       setCategory("family");
-      setMessage("✓ Memory saved successfully.");
+
+      setMessage(
+        "✓ Memory saved successfully."
+      );
     } catch (error) {
       setMessage(error.message);
+      handleAuthError(error);
     } finally {
       setSaving(false);
     }
@@ -159,7 +199,8 @@ function MemoryVault() {
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Could not create the therapy game."
+          data.detail ||
+            "Could not create the therapy game."
         );
       }
 
@@ -175,12 +216,17 @@ function MemoryVault() {
         ...current,
         [memoryId]: error.message,
       }));
+
+      handleAuthError(error);
     } finally {
       setGameLoading(null);
     }
   };
 
-  const checkAnswer = async (memoryId, answer) => {
+  const checkAnswer = async (
+    memoryId,
+    answer
+  ) => {
     const game = games[memoryId];
 
     if (!game) {
@@ -215,7 +261,8 @@ function MemoryVault() {
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Could not check the answer."
+          data.detail ||
+            "Could not check the answer."
         );
       }
 
@@ -230,210 +277,572 @@ function MemoryVault() {
         ...current,
         [memoryId]: error.message,
       }));
+
+      handleAuthError(error);
     }
+  };
+
+  const getCategoryIcon = (value) => {
+    const icons = {
+      family: "👨‍👩‍👧",
+      friends: "🤝",
+      places: "📍",
+      events: "🎉",
+      food: "🍲",
+      travel: "🧳",
+      other: "💭",
+      voice: "🎙️",
+    };
+
+    return (
+      icons[
+        String(value || "").toLowerCase()
+      ] || "🧠"
+    );
+  };
+
+  const getCategoryLabel = (value) => {
+    if (!value) {
+      return "Memory";
+    }
+
+    const labels = {
+      family: "Family",
+      friends: "Friends",
+      places: "Places",
+      events: "Events",
+      food: "Food",
+      travel: "Travel",
+      other: "Other",
+      voice: "Voice Memory",
+    };
+
+    const normalized = String(
+      value
+    ).toLowerCase();
+
+    return labels[normalized] || value;
+  };
+
+  const getMemoryDate = (memory) => {
+    const value =
+      memory?.created_at ||
+      memory?.updated_at;
+
+    if (!value) {
+      return "";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString(
+      undefined,
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }
+    );
+  };
+
+  const getMemoryPreview = (value) => {
+    if (!value) {
+      return "";
+    }
+
+    const cleaned = String(value).trim();
+
+    if (cleaned.length <= 180) {
+      return cleaned;
+    }
+
+    return `${cleaned.slice(0, 180)}...`;
   };
 
   return (
     <>
-      <style>
-        {`
-          .memory-vault-page {
-            min-height: 100vh;
-            background: #f8f5ef;
-            padding: 45px 7%;
-            color: #28352f;
-            font-family: Arial, Helvetica, sans-serif;
-          }
+      <style>{`
+        .memory-vault-page {
+          min-height: 100vh;
+          background: #f8f5ef;
+          padding: 45px 7%;
+          box-sizing: border-box;
+          color: #28352f;
+          font-family: Arial, Helvetica, sans-serif;
+        }
 
-          .memory-vault-container {
-            max-width: 1100px;
-            margin: 0 auto;
+        .memory-vault-container {
+          max-width: 1100px;
+          margin: 0 auto;
+        }
+
+        .memory-vault-brand {
+          margin: 0 0 8px;
+          color: #57765f;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 1px;
+        }
+
+        .memory-vault-title {
+          margin: 0 0 10px;
+          color: #28352f;
+          font-size: 44px;
+          line-height: 1.1;
+        }
+
+        .memory-vault-description {
+          max-width: 720px;
+          margin: 0 0 14px;
+          color: #66736b;
+          font-size: 18px;
+          line-height: 1.6;
+        }
+
+        .memory-vault-language {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          margin: 0 0 34px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: #edf3ed;
+          color: #46634f;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .memory-vault-layout {
+          display: grid;
+          grid-template-columns:
+            minmax(0, 0.88fr)
+            minmax(0, 1.12fr);
+          gap: 25px;
+          align-items: start;
+        }
+
+        .memory-vault-panel {
+          background: #fffdf9;
+          border: 1px solid #e8e1d5;
+          border-radius: 20px;
+          padding: 28px;
+          min-width: 0;
+        }
+
+        .memory-vault-panel-title {
+          margin: 0 0 7px;
+          color: #28352f;
+          font-size: 22px;
+        }
+
+        .memory-vault-panel-description {
+          margin: 0 0 22px;
+          color: #738078;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .memory-vault-field {
+          display: grid;
+          gap: 7px;
+          margin-bottom: 19px;
+        }
+
+        .memory-vault-label {
+          color: #46634f;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .memory-vault-input {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 14px;
+          border: 1px solid #d9dfd8;
+          border-radius: 11px;
+          background: #fffdf9;
+          color: #28352f;
+          font: inherit;
+          font-size: 16px;
+        }
+
+        .memory-vault-input::placeholder {
+          color: #9aa59e;
+        }
+
+        .memory-vault-input:focus {
+          outline: none;
+          border-color: #57765f;
+          box-shadow:
+            0 0 0 3px
+            rgba(87, 118, 95, .1);
+        }
+
+        .memory-vault-textarea {
+          min-height: 150px;
+          resize: vertical;
+          line-height: 1.6;
+        }
+
+        .memory-vault-save-button {
+          width: 100%;
+          min-height: 50px;
+          padding: 14px 18px;
+          border: none;
+          border-radius: 12px;
+          background: #57765f;
+          color: #ffffff;
+          cursor: pointer;
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .memory-vault-save-button:hover {
+          filter: brightness(.96);
+        }
+
+        .memory-vault-save-button:disabled {
+          cursor: not-allowed;
+          opacity: .65;
+        }
+
+        .memory-vault-message {
+          margin: 15px 0 0;
+          line-height: 1.5;
+          font-weight: 700;
+        }
+
+        .memory-vault-message.success {
+          color: #57765f;
+        }
+
+        .memory-vault-message.error {
+          color: #a05a45;
+        }
+
+        .memory-vault-saved-header {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 15px;
+          margin-bottom: 18px;
+        }
+
+        .memory-vault-count {
+          flex: 0 0 auto;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: #f1eee6;
+          color: #6e664f;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .memory-vault-memory-list {
+          display: grid;
+          gap: 14px;
+        }
+
+        .memory-vault-memory-card {
+          padding: 20px;
+          border: 1px solid #e8e1d5;
+          border-radius: 18px;
+          background: #fffdf9;
+          transition:
+            transform .18s ease,
+            box-shadow .18s ease,
+            border-color .18s ease;
+        }
+
+        .memory-vault-memory-card:hover {
+          transform: translateY(-2px);
+          border-color: #d5ddd4;
+          box-shadow:
+            0 10px 25px
+            rgba(40, 53, 47, .06);
+        }
+
+        .memory-vault-memory-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 13px;
+        }
+
+        .memory-vault-memory-category {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: #edf3ed;
+          color: #46634f;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: .6px;
+          text-transform: uppercase;
+        }
+
+        .memory-vault-memory-date {
+          flex: 0 0 auto;
+          color: #9aa59e;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .memory-vault-memory-title {
+          margin: 0 0 9px;
+          color: #28352f;
+          font-size: 23px;
+          line-height: 1.25;
+          overflow-wrap: anywhere;
+        }
+
+        .memory-vault-memory-content {
+          margin: 0 0 17px;
+          color: #66736b;
+          font-size: 15px;
+          line-height: 1.65;
+          overflow-wrap: anywhere;
+        }
+
+        .memory-vault-memory-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .memory-vault-memory-hint {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #8a968e;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .memory-vault-game-button {
+          min-height: 44px;
+          padding: 11px 15px;
+          border: none;
+          border-radius: 10px;
+          background: #57765f;
+          color: #ffffff;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .memory-vault-game-button:hover {
+          filter: brightness(.96);
+        }
+
+        .memory-vault-game-button:disabled {
+          cursor: not-allowed;
+          opacity: .65;
+        }
+
+        .memory-vault-game {
+          margin-top: 18px;
+          padding: 18px;
+          border: 1px solid #dfe6de;
+          border-radius: 15px;
+          background: #f4f6f1;
+        }
+
+        .memory-vault-game-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .memory-vault-game-label {
+          margin: 0 0 5px;
+          color: #8a968e;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: .8px;
+        }
+
+        .memory-vault-game-language {
+          padding: 5px 8px;
+          border-radius: 999px;
+          background: #ffffff;
+          color: #57765f;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .memory-vault-game-question {
+          margin: 0 0 15px;
+          color: #28352f;
+          font-size: 18px;
+          line-height: 1.45;
+          overflow-wrap: anywhere;
+        }
+
+        .memory-vault-options {
+          display: grid;
+          gap: 9px;
+        }
+
+        .memory-vault-option {
+          width: 100%;
+          min-height: 48px;
+          padding: 12px 13px;
+          border-radius: 10px;
+          color: #28352f;
+          font-size: 15px;
+          cursor: pointer;
+          text-align: left;
+          font: inherit;
+          transition:
+            background .15s ease,
+            border-color .15s ease;
+        }
+
+        .memory-vault-option:hover {
+          border-color: #aebcaf !important;
+          background: #f8faf6 !important;
+        }
+
+        .memory-vault-game-message {
+          margin: 14px 0 0;
+          font-weight: 700;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .memory-vault-empty {
+          padding: 28px 22px;
+          border: 1px dashed #d6ddd5;
+          border-radius: 16px;
+          background: #f7f7f3;
+          color: #738078;
+          line-height: 1.6;
+          text-align: center;
+        }
+
+        .memory-vault-empty-icon {
+          margin-bottom: 8px;
+          font-size: 28px;
+        }
+
+        .memory-vault-loading {
+          color: #57765f;
+          font-weight: 700;
+        }
+
+        @media (max-width: 900px) {
+          .memory-vault-page {
+            padding: 40px 5%;
           }
 
           .memory-vault-layout {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 25px;
-            align-items: start;
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .memory-vault-page {
+            padding: 70px 16px 35px;
+          }
+
+          .memory-vault-title {
+            font-size: 34px;
+          }
+
+          .memory-vault-description {
+            font-size: 16px;
+          }
+
+          .memory-vault-language {
+            margin-bottom: 25px;
           }
 
           .memory-vault-panel {
-            background: #fffdf9;
-            border: 1px solid #e8e1d5;
-            border-radius: 20px;
-            padding: 28px;
-            min-width: 0;
+            padding: 20px;
+            border-radius: 18px;
           }
 
-          .memory-vault-input {
-            width: 100%;
-            padding: 14px;
-            border: 1px solid #d9dfd8;
-            border-radius: 10px;
-            font-size: 16px;
-            background: #fffdf9;
-            color: #28352f;
+          .memory-vault-saved-header {
+            align-items: flex-start;
+            flex-direction: column;
           }
 
-          .memory-vault-input:focus {
-            outline: none;
-            border-color: #57765f;
-            box-shadow: 0 0 0 3px rgba(87, 118, 95, 0.1);
+          .memory-vault-memory-card {
+            padding: 18px;
           }
 
-          .memory-vault-save-button {
-            width: 100%;
-            padding: 15px;
-            border: none;
-            border-radius: 12px;
-            background: #57765f;
-            color: #ffffff;
-            font-size: 17px;
-            font-weight: 700;
+          .memory-vault-memory-top {
+            flex-direction: column;
+            gap: 9px;
+          }
+
+          .memory-vault-memory-footer {
+            align-items: stretch;
+            flex-direction: column;
           }
 
           .memory-vault-game-button {
-            padding: 12px 16px;
-            border: none;
-            border-radius: 10px;
-            background: #57765f;
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: 700;
-          }
-
-          .memory-vault-option {
             width: 100%;
-            padding: 13px;
-            border-radius: 10px;
-            color: #28352f;
-            font-size: 15px;
-            cursor: pointer;
-            text-align: left;
           }
 
-          @media (max-width: 900px) {
-            .memory-vault-page {
-              padding: 40px 5%;
-            }
-
-            .memory-vault-layout {
-              grid-template-columns: 1fr;
-            }
+          .memory-vault-game-header {
+            flex-direction: column;
           }
 
-          @media (max-width: 600px) {
-            .memory-vault-page {
-              padding: 70px 16px 35px;
-            }
+          .memory-vault-game-language {
+            align-self: flex-start;
+          }
+        }
 
-            .memory-vault-container {
-              width: 100%;
-            }
-
-            .memory-vault-layout {
-              display: flex;
-              flex-direction: column;
-              gap: 18px;
-            }
-
-            .memory-vault-panel {
-              width: 100%;
-              padding: 20px;
-              border-radius: 18px;
-            }
-
-            .memory-vault-title {
-              font-size: 34px !important;
-            }
-
-            .memory-vault-description {
-              font-size: 16px !important;
-            }
-
-            .memory-vault-language {
-              margin-bottom: 25px !important;
-            }
-
-            .memory-vault-memory-card {
-              padding: 18px !important;
-            }
-
-            .memory-vault-game {
-              padding: 16px !important;
-            }
-
-            .memory-vault-option {
-              min-height: 48px;
-              font-size: 15px;
-            }
+        @media (max-width: 390px) {
+          .memory-vault-page {
+            padding-left: 12px;
+            padding-right: 12px;
           }
 
-          @media (max-width: 390px) {
-            .memory-vault-page {
-              padding-left: 12px;
-              padding-right: 12px;
-            }
-
-            .memory-vault-panel {
-              padding: 18px;
-            }
-
-            .memory-vault-title {
-              font-size: 32px !important;
-            }
+          .memory-vault-title {
+            font-size: 32px;
           }
-        `}
-      </style>
+
+          .memory-vault-panel {
+            padding: 18px;
+          }
+        }
+      `}</style>
 
       <div className="memory-vault-page">
         <div className="memory-vault-container">
-          <p
-            style={{
-              color: "#57765f",
-              fontSize: "14px",
-              fontWeight: "700",
-              letterSpacing: "1px",
-              margin: "0 0 8px",
-            }}
-          >
-            SMRITI AI
+          <p className="memory-vault-brand">
+            SMRITI AI · MEMORY VAULT
           </p>
 
-          <h1
-            className="memory-vault-title"
-            style={{
-              color: "#28352f",
-              fontSize: "44px",
-              margin: "0 0 10px",
-            }}
-          >
+          <h1 className="memory-vault-title">
             Memory Vault
           </h1>
 
-          <p
-            className="memory-vault-description"
-            style={{
-              color: "#66736b",
-              fontSize: "18px",
-              lineHeight: "1.6",
-              marginBottom: "15px",
-              maxWidth: "700px",
-            }}
-          >
-            Add meaningful memories that can later become
-            personalized cognitive activities.
+          <p className="memory-vault-description">
+            Preserve meaningful moments that can
+            become personalized cognitive activities
+            for your loved one.
           </p>
 
-          <p
-            className="memory-vault-language"
-            style={{
-              color: "#57765f",
-              fontSize: "15px",
-              fontWeight: "700",
-              marginBottom: "35px",
-            }}
-          >
+          <p className="memory-vault-language">
+            🌐{" "}
             {loadingLanguage
               ? "Loading patient language..."
               : `Patient language: ${language}`}
@@ -441,117 +850,126 @@ function MemoryVault() {
 
           <div className="memory-vault-layout">
             <div className="memory-vault-panel">
-              <h2
-                style={{
-                  color: "#28352f",
-                  marginTop: 0,
-                  marginBottom: "22px",
-                }}
-              >
+              <h2 className="memory-vault-panel-title">
                 Add a Memory
               </h2>
 
+              <p className="memory-vault-panel-description">
+                Capture a familiar person, place,
+                event, routine, or family moment.
+              </p>
+
               <form onSubmit={saveMemory}>
-                <label
-                  style={{
-                    display: "block",
-                    fontWeight: "600",
-                    color: "#46634f",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Memory title
-                </label>
+                <div className="memory-vault-field">
+                  <label
+                    className="memory-vault-label"
+                    htmlFor="memory-title"
+                  >
+                    Memory title
+                  </label>
 
-                <input
-                  className="memory-vault-input"
-                  value={title}
-                  onChange={(event) =>
-                    setTitle(event.target.value)
-                  }
-                  placeholder="Family Wedding"
-                  required
-                  style={{ marginBottom: "20px" }}
-                />
+                  <input
+                    id="memory-title"
+                    className="memory-vault-input"
+                    value={title}
+                    onChange={(event) =>
+                      setTitle(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Family Wedding"
+                    required
+                  />
+                </div>
 
-                <label
-                  style={{
-                    display: "block",
-                    fontWeight: "600",
-                    color: "#46634f",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Memory
-                </label>
+                <div className="memory-vault-field">
+                  <label
+                    className="memory-vault-label"
+                    htmlFor="memory-content"
+                  >
+                    Memory
+                  </label>
 
-                <textarea
-                  className="memory-vault-input"
-                  value={content}
-                  onChange={(event) =>
-                    setContent(event.target.value)
-                  }
-                  placeholder="Tell us about this memory..."
-                  required
-                  rows="6"
-                  style={{
-                    resize: "vertical",
-                    marginBottom: "20px",
-                  }}
-                />
+                  <textarea
+                    id="memory-content"
+                    className="memory-vault-input memory-vault-textarea"
+                    value={content}
+                    onChange={(event) =>
+                      setContent(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Tell us about this memory..."
+                    required
+                  />
+                </div>
 
-                <label
-                  style={{
-                    display: "block",
-                    fontWeight: "600",
-                    color: "#46634f",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Category
-                </label>
+                <div className="memory-vault-field">
+                  <label
+                    className="memory-vault-label"
+                    htmlFor="memory-category"
+                  >
+                    Category
+                  </label>
 
-                <select
-                  className="memory-vault-input"
-                  value={category}
-                  onChange={(event) =>
-                    setCategory(event.target.value)
-                  }
-                  style={{
-                    marginBottom: "24px",
-                  }}
-                >
-                  <option value="family">Family</option>
-                  <option value="friends">Friends</option>
-                  <option value="places">Places</option>
-                  <option value="events">Events</option>
-                  <option value="food">Food</option>
-                  <option value="travel">Travel</option>
-                  <option value="other">Other</option>
-                </select>
+                  <select
+                    id="memory-category"
+                    className="memory-vault-input"
+                    value={category}
+                    onChange={(event) =>
+                      setCategory(
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="family">
+                      👨‍👩‍👧 Family
+                    </option>
+
+                    <option value="friends">
+                      🤝 Friends
+                    </option>
+
+                    <option value="places">
+                      📍 Places
+                    </option>
+
+                    <option value="events">
+                      🎉 Events
+                    </option>
+
+                    <option value="food">
+                      🍲 Food
+                    </option>
+
+                    <option value="travel">
+                      🧳 Travel
+                    </option>
+
+                    <option value="other">
+                      💭 Other
+                    </option>
+                  </select>
+                </div>
 
                 <button
                   type="submit"
                   className="memory-vault-save-button"
                   disabled={saving}
-                  style={{
-                    cursor: saving ? "not-allowed" : "pointer",
-                    opacity: saving ? 0.7 : 1,
-                  }}
                 >
-                  {saving ? "Saving..." : "Save Memory"}
+                  {saving
+                    ? "Saving memory..."
+                    : "Save Memory"}
                 </button>
               </form>
 
               {message && (
                 <p
-                  style={{
-                    marginTop: "18px",
-                    color: message.startsWith("✓")
-                      ? "#57765f"
-                      : "#a05a45",
-                    fontWeight: "700",
-                  }}
+                  className={`memory-vault-message ${
+                    message.startsWith("✓")
+                      ? "success"
+                      : "error"
+                  }`}
                 >
                   {message}
                 </p>
@@ -559,126 +977,145 @@ function MemoryVault() {
             </div>
 
             <div>
-              <h2
-                style={{
-                  color: "#28352f",
-                  marginTop: 0,
-                  marginBottom: "20px",
-                }}
-              >
-                Saved Memories
-              </h2>
+              <div className="memory-vault-saved-header">
+                <div>
+                  <h2 className="memory-vault-panel-title">
+                    Saved Memories
+                  </h2>
+
+                  <p
+                    className="memory-vault-panel-description"
+                    style={{
+                      marginBottom: 0,
+                    }}
+                  >
+                    Each memory can become a
+                    personalized therapy activity.
+                  </p>
+                </div>
+
+                {!loading &&
+                  memories.length > 0 && (
+                    <span className="memory-vault-count">
+                      {memories.length}{" "}
+                      {memories.length === 1
+                        ? "memory"
+                        : "memories"}
+                    </span>
+                  )}
+              </div>
 
               {loading ? (
-                <p style={{ color: "#66736b" }}>
+                <p className="memory-vault-loading">
                   Loading memories...
                 </p>
               ) : memories.length === 0 ? (
-                <div
-                  className="memory-vault-panel"
-                  style={{
-                    color: "#66736b",
-                  }}
-                >
-                  No memories added yet.
+                <div className="memory-vault-empty">
+                  <div className="memory-vault-empty-icon">
+                    🧠
+                  </div>
+
+                  <strong>
+                    No memories added yet.
+                  </strong>
+
+                  <div>
+                    Add the first meaningful
+                    memory using the form.
+                  </div>
                 </div>
               ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "15px",
-                  }}
-                >
+                <div className="memory-vault-memory-list">
                   {memories.map((memory) => {
-                    const game = games[memory.id];
+                    const game =
+                      games[memory.id];
+
                     const gameMessage =
                       gameMessages[memory.id];
+
+                    const categoryLabel =
+                      getCategoryLabel(
+                        memory.category
+                      );
+
+                    const categoryIcon =
+                      getCategoryIcon(
+                        memory.category
+                      );
+
+                    const memoryDate =
+                      getMemoryDate(memory);
 
                     return (
                       <div
                         className="memory-vault-memory-card"
                         key={memory.id}
-                        style={{
-                          background: "#fffdf9",
-                          border: "1px solid #e8e1d5",
-                          borderRadius: "18px",
-                          padding: "22px",
-                          minWidth: 0,
-                        }}
                       >
-                        <p
-                          style={{
-                            margin: "0 0 7px",
-                            color: "#8a968e",
-                            fontSize: "12px",
-                            fontWeight: "700",
-                            textTransform: "uppercase",
-                            letterSpacing: "1px",
-                          }}
-                        >
-                          {memory.category || "Memory"}
-                        </p>
+                        <div className="memory-vault-memory-top">
+                          <span className="memory-vault-memory-category">
+                            <span>
+                              {categoryIcon}
+                            </span>
 
-                        <h3
-                          style={{
-                            margin: "0 0 10px",
-                            color: "#28352f",
-                            fontSize: "22px",
-                            overflowWrap: "anywhere",
-                          }}
-                        >
+                            <span>
+                              {categoryLabel}
+                            </span>
+                          </span>
+
+                          {memoryDate && (
+                            <span className="memory-vault-memory-date">
+                              {memoryDate}
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="memory-vault-memory-title">
                           {memory.title}
                         </h3>
 
-                        <p
-                          style={{
-                            margin: "0 0 16px",
-                            color: "#66736b",
-                            lineHeight: "1.6",
-                            overflowWrap: "anywhere",
-                          }}
-                        >
-                          {memory.content}
+                        <p className="memory-vault-memory-content">
+                          {getMemoryPreview(
+                            memory.content
+                          )}
                         </p>
 
                         {!game && (
-                          <button
-                            className="memory-vault-game-button"
-                            onClick={() =>
-                              generateGame(memory.id)
-                            }
-                            disabled={
-                              gameLoading === memory.id ||
-                              loadingLanguage
-                            }
-                            style={{
-                              cursor:
-                                gameLoading === memory.id ||
+                          <div className="memory-vault-memory-footer">
+                            <span className="memory-vault-memory-hint">
+                              🧠 Turn this memory
+                              into a therapy
+                              activity
+                            </span>
+
+                            <button
+                              type="button"
+                              className="memory-vault-game-button"
+                              onClick={() =>
+                                generateGame(
+                                  memory.id
+                                )
+                              }
+                              disabled={
+                                gameLoading ===
+                                  memory.id ||
                                 loadingLanguage
-                                  ? "not-allowed"
-                                  : "pointer",
-                              opacity:
-                                gameLoading === memory.id ||
-                                loadingLanguage
-                                  ? 0.7
-                                  : 1,
-                            }}
-                          >
-                            {gameLoading === memory.id
-                              ? "Creating game..."
-                              : loadingLanguage
-                              ? "Loading language..."
-                              : "Create Therapy Game →"}
-                          </button>
+                              }
+                            >
+                              {gameLoading ===
+                              memory.id
+                                ? "Creating game..."
+                                : loadingLanguage
+                                ? "Loading language..."
+                                : "Create Therapy Game →"}
+                            </button>
+                          </div>
                         )}
 
                         {!game && gameMessage && (
                           <p
+                            className="memory-vault-message error"
                             style={{
-                              margin: "14px 0 0",
-                              color: "#a05a45",
-                              fontWeight: "700",
-                              overflowWrap: "anywhere",
+                              marginTop: "14px",
                             }}
                           >
                             {gameMessage}
@@ -686,86 +1123,83 @@ function MemoryVault() {
                         )}
 
                         {game && (
-                          <div
-                            className="memory-vault-game"
-                            style={{
-                              marginTop: "18px",
-                              padding: "18px",
-                              borderRadius: "14px",
-                              background: "#f4f6f1",
-                            }}
-                          >
-                            <p
-                              style={{
-                                margin: "0 0 8px",
-                                color: "#8a968e",
-                                fontSize: "12px",
-                                fontWeight: "700",
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              Personalized Game · {language}
-                            </p>
+                          <div className="memory-vault-game">
+                            <div className="memory-vault-game-header">
+                              <div>
+                                <p className="memory-vault-game-label">
+                                  Personalized Game
+                                </p>
 
-                            <h4
-                              style={{
-                                margin: "0 0 15px",
-                                color: "#28352f",
-                                fontSize: "19px",
-                                lineHeight: "1.4",
-                                overflowWrap: "anywhere",
-                              }}
-                            >
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    color: "#57765f",
+                                    fontSize: "13px",
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Created from this
+                                  memory
+                                </p>
+                              </div>
+
+                              <span className="memory-vault-game-language">
+                                🌐 {language}
+                              </span>
+                            </div>
+
+                            <h4 className="memory-vault-game-question">
                               {game.question}
                             </h4>
 
-                            <div
-                              style={{
-                                display: "grid",
-                                gap: "9px",
-                              }}
-                            >
-                              {game.options?.map(
-                                (option, index) => (
-                                  <button
-                                    className="memory-vault-option"
-                                    key={index}
-                                    onClick={() =>
-                                      checkAnswer(
-                                        memory.id,
-                                        option
-                                      )
-                                    }
-                                    style={{
-                                      border:
-                                        game.selectedAnswer ===
-                                        option
-                                          ? "2px solid #57765f"
-                                          : "1px solid #d9dfd8",
-                                      background:
-                                        game.selectedAnswer ===
-                                        option
-                                          ? "#edf3ed"
-                                          : "#fffdf9",
-                                    }}
-                                  >
-                                    {option}
-                                  </button>
-                                )
-                              )}
+                            <div className="memory-vault-options">
+                              {Array.isArray(
+                                game.options
+                              ) &&
+                                game.options.map(
+                                  (
+                                    option,
+                                    index
+                                  ) => (
+                                    <button
+                                      type="button"
+                                      className="memory-vault-option"
+                                      key={`${memory.id}-${index}`}
+                                      onClick={() =>
+                                        checkAnswer(
+                                          memory.id,
+                                          option
+                                        )
+                                      }
+                                      style={{
+                                        border:
+                                          game.selectedAnswer ===
+                                          option
+                                            ? "2px solid #57765f"
+                                            : "1px solid #d9dfd8",
+                                        background:
+                                          game.selectedAnswer ===
+                                          option
+                                            ? "#edf3ed"
+                                            : "#fffdf9",
+                                      }}
+                                    >
+                                      {option}
+                                    </button>
+                                  )
+                                )}
                             </div>
 
                             {gameMessage && (
                               <p
+                                className="memory-vault-game-message"
                                 style={{
-                                  margin: "14px 0 0",
                                   color:
-                                    gameMessage.startsWith("✓")
+                                    gameMessage.startsWith(
+                                      "✓"
+                                    )
                                       ? "#57765f"
                                       : "#9a6a45",
-                                  fontWeight: "700",
-                                  lineHeight: "1.5",
-                                  overflowWrap: "anywhere",
                                 }}
                               >
                                 {gameMessage}
