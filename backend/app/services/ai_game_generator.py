@@ -335,6 +335,14 @@ def extract_memory_facts(content: str) -> list[dict]:
             "value": cleaned,
         })
 
+        # Fallback: never reject a non-empty memory just because
+    # no structured keyword was detected.
+    if not facts and content.strip():
+        facts.append({
+            "type": "memory",
+            "value": content.strip(),
+        })
+
     return facts
 
 def get_question_template(

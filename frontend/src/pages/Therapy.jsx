@@ -283,6 +283,45 @@ function Therapy() {
 
   const currentGame = games[currentIndex] || null;
 
+  const getCognitiveTitle = (gameType) => {
+    const titles = {
+      multiple_choice: "Memory Recall",
+      true_false: "Memory Check",
+      fill_blank: "Recall Challenge",
+      attention: "Attention Challenge",
+      routine_recall: "Routine Recall",
+      pattern_recognition: "Pattern Recognition",
+      object_recognition: "Object Recognition",
+      emotional_engagement: "Personal Memory",
+    };
+
+    return titles[gameType] || "Cognitive Activity";
+  };
+
+  const getCognitiveIcon = (gameType) => {
+    const icons = {
+      multiple_choice: "🧠",
+      true_false: "🔎",
+      fill_blank: "✍️",
+      attention: "🎯",
+      routine_recall: "🕰️",
+      pattern_recognition: "🧩",
+      object_recognition: "👀",
+      emotional_engagement: "❤️",
+    };
+
+    return icons[gameType] || "🧠";
+  };
+
+  const getDifficultyLabel = (difficulty) => {
+    if (!difficulty) return "Adaptive";
+
+    return (
+      difficulty.charAt(0).toUpperCase() +
+      difficulty.slice(1)
+    );
+  };
+
   const isSessionComplete =
     games.length === 5 &&
     currentIndex >= games.length - 1 &&
@@ -402,6 +441,42 @@ function Therapy() {
             text-transform: uppercase;
             letter-spacing: 1px;
             margin: 0 0 10px;
+          }
+
+          .therapy-cognitive-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #edf3ed;
+            color: #46634f;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 14px;
+          }
+
+          .therapy-cognitive-badge-icon {
+            font-size: 17px;
+          }
+
+          .therapy-session-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+          }
+
+          .therapy-meta-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 7px 10px;
+            border-radius: 999px;
+            background: #f4f6f1;
+            color: #66736b;
+            font-size: 12px;
+            font-weight: 700;
           }
 
           .therapy-memory-title {
@@ -541,6 +616,14 @@ function Therapy() {
               font-size: 24px;
             }
 
+            .therapy-session-meta {
+              align-items: flex-start;
+            }
+
+            .therapy-cognitive-badge {
+              font-size: 13px;
+            }
+
             .therapy-option-button {
               font-size: 16px;
               padding: 14px;
@@ -644,10 +727,25 @@ function Therapy() {
                 />
               </div>
 
-              <p className="therapy-game-label">
-                {currentGame.game_type || "Memory Game"} ·{" "}
-                {language}
-              </p>
+              <div className="therapy-cognitive-badge">
+                <span className="therapy-cognitive-badge-icon">
+                  {getCognitiveIcon(currentGame.game_type)}
+                </span>
+
+                <span>
+                  {getCognitiveTitle(currentGame.game_type)}
+                </span>
+              </div>
+
+              <div className="therapy-session-meta">
+                <span className="therapy-meta-pill">
+                  🌐 {language}
+                </span>
+
+                <span className="therapy-meta-pill">
+                  ⚡ {getDifficultyLabel(currentGame.difficulty)}
+                </span>
+              </div>
 
               <h2 className="therapy-question">
                 {currentGame.question}

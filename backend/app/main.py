@@ -12,6 +12,7 @@ from app.models.game_attempt import GameAttempt
 from app.models.user import User
 from app.models.therapy_session import TherapySession
 from app.models.session_game import SessionGame
+from app.models.reminder import Reminder
 
 # Import routers
 from app.api.memories import router as memories_router
@@ -24,19 +25,18 @@ from app.api.tts import router as tts_router
 from app.api.memory_dna import router as memory_dna_router
 from app.api.caregiver import router as caregiver_router
 from app.api.adaptive import router as adaptive_router
+from app.api.reminders import router as reminders_router
 
 
-# Create all database tables
 Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
     title="Smriti AI Backend",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
-# Allow frontend applications to communicate with the backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -46,7 +46,6 @@ app.add_middleware(
 )
 
 
-# Register routers
 app.include_router(memories_router)
 app.include_router(games_router)
 app.include_router(patient_router)
@@ -57,6 +56,7 @@ app.include_router(tts_router)
 app.include_router(memory_dna_router)
 app.include_router(caregiver_router)
 app.include_router(adaptive_router)
+app.include_router(reminders_router)
 
 
 @app.get("/")
