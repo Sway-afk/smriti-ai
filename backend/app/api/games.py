@@ -281,6 +281,33 @@ def get_patient_game_analytics(
         if total_attempts > 0
         else 0
     )
+    average_score = (
+        total_score / total_attempts
+        if total_attempts > 0
+        else 0
+    )
+
+    total_sessions = (
+        db.query(TherapySession)
+        .filter(TherapySession.patient_id == patient_id)
+        .count()
+    )
+
+    recent_scores = (
+        db.query(GameAttempt)
+        .join(
+            Memory,
+            GameAttempt.memory_id == Memory.id
+        )
+        .filter(
+            Memory.patient_id == patient_id
+        )
+        .order_by(GameAttempt.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    game_type_stats = {}
 
     game_type_stats = {}
 
@@ -389,18 +416,43 @@ def get_patient_game_analytics(
         )
 
     return {
-        "patient_id": patient_id,
-        "total_attempts": total_attempts,
-        "correct_attempts": correct_attempts,
-        "total_score": total_score,
-        "accuracy": round(
-            accuracy,
-            2
-        ),
-        "game_type_stats": game_type_stats,
-        "memory_stats": memory_stats,
-        "difficulty_stats": difficulty_stats
-    }
+    "patient_id": patient_id,
+
+    "total_sessions": total_sessions,
+
+    "total_attempts": total_attempts,
+
+    "correct_attempts": correct_attempts,
+
+    "total_score": total_score,
+
+    "average_score": round(
+        average_score,
+        2
+    ),
+
+    "overall_accuracy": round(
+        accuracy,
+        2
+    ),
+
+    "recent_scores": [
+        {
+            "score": attempt.score,
+            "correct": attempt.correct,
+            "game_type": attempt.game_type,
+            "difficulty": attempt.difficulty,
+            "created_at": attempt.created_at,
+        }
+        for attempt in recent_scores
+    ],
+
+    "game_type_stats": game_type_stats,
+
+    "memory_stats": memory_stats,
+
+    "difficulty_stats": difficulty_stats,
+}
 
 
 @router.get("/activity/patient/{patient_id}")
