@@ -6,10 +6,12 @@ const PATIENT_ID = 1;
 function Dashboard({
   onOpenMemoryVault,
   onOpenVoiceMemory,
+  onOpenPatientProfile,
   onLogout,
 }) {
   const [dashboard, setDashboard] = useState(null);
   const [memoryGraph, setMemoryGraph] = useState(null);
+  const [patientProfile, setPatientProfile] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [reminderNow, setReminderNow] = useState(new Date());
 
@@ -83,6 +85,29 @@ function Dashboard({
     }
   };
 
+  const loadPatientProfile = async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/patients/${PATIENT_ID}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Could not load patient profile."
+        );
+      }
+
+      setPatientProfile(data);
+    } catch (err) {
+      handleAuthError(err.message);
+    }
+  };
+
   const loadMemoryGraph = async () => {
     try {
       setGraphLoading(true);
@@ -143,6 +168,7 @@ function Dashboard({
 
   useEffect(() => {
     loadDashboard();
+    loadPatientProfile();
     loadMemoryGraph();
     loadReminders();
   }, []);
@@ -320,6 +346,7 @@ function Dashboard({
   };
 
   const patient = dashboard?.patient || {};
+  const favoriteAnimal = patientProfile?.favorite_animal || "";
   const overallProgress =
     dashboard?.overall_progress || {};
   const recentActivity =
@@ -1492,13 +1519,12 @@ function Dashboard({
               </p>
 
               <h1 className="dashboard-title">
-                Care that remembers.
+                Care that remembers, {patient.full_name || "your loved one"}.
               </h1>
 
               <p className="dashboard-subtitle">
-                Monitor personalized cognitive care,
-                review progress, and manage meaningful
-                memories for your loved one.
+                A care experience shaped around {patient.full_name || "this patient"}'s memories,
+                preferences, and everyday routines.
               </p>
             </div>
 
@@ -1671,6 +1697,12 @@ function Dashboard({
                 <h2 className="dashboard-panel-title">
                   Memory Connections
                 </h2>
+
+                {favoriteAnimal && (
+                  <p className="memory-graph-intro">
+                    🐘 A familiar favorite: {favoriteAnimal}
+                  </p>
+                )}
 
                 <p className="memory-graph-intro">
                   Smriti AI connects memories with
@@ -2488,6 +2520,15 @@ function Dashboard({
                     }
                   >
                     🎙 Record a Voice Memory
+                  </button>
+
+                  <button
+                    className="dashboard-action-button dashboard-secondary-action"
+                    onClick={
+                      onOpenPatientProfile
+                    }
+                  >
+                    ✨ Personalize Patient
                   </button>
                 </div>
               </div>

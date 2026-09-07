@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Text
+
 from app.database.database import Base
 
 
@@ -10,3 +11,10 @@ class Patient(Base):
     age = Column(Integer)
     language = Column(String)
     caregiver_name = Column(String)
+
+    favorite_color = Column(String, nullable=True)
+    favorite_animal = Column(String, nullable=True)
+    favorite_activity = Column(String, nullable=True)
+    favorite_food = Column(String, nullable=True)
+    favorite_place = Column(String, nullable=True)
+    comfort_memory = Column(Text, nullable=True)
