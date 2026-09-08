@@ -11,6 +11,8 @@ class TherapySession(Base):
 
     patient_id = Column(Integer, nullable=False, index=True)
 
+    memory_id = Column(Integer, nullable=False, index=True)
+
     status = Column(
         String,
         nullable=False,

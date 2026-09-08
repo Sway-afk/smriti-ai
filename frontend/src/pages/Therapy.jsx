@@ -4,36 +4,41 @@ const API_URL = "http://127.0.0.1:8000";
 const PATIENT_ID = 1;
 
 function Therapy() {
-  const [language, setLanguage] = useState("English");
-  const [loadingLanguage, setLoadingLanguage] = useState(true);
+const [language, setLanguage] = useState("English");
+const [loadingLanguage, setLoadingLanguage] = useState(true);
 
-  const [session, setSession] = useState(null);
-  const [games, setGames] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+const [session, setSession] = useState(null);
+const [games, setGames] = useState([]);
+const [currentIndex, setCurrentIndex] = useState(0);
 
-  const [selectedAnswer, setSelectedAnswer] = useState("");
-  const [answerResult, setAnswerResult] = useState(null);
+const [selectedAnswer, setSelectedAnswer] = useState("");
+const [answerResult, setAnswerResult] = useState(null);
 
-  const [loadingSession, setLoadingSession] = useState(false);
-  const [checkingAnswer, setCheckingAnswer] = useState(false);
-  const [completingGame, setCompletingGame] = useState(false);
+const [loadingSession, setLoadingSession] = useState(false);
+const [checkingAnswer, setCheckingAnswer] = useState(false);
+const [completingGame, setCompletingGame] = useState(false);
 
-  const [message, setMessage] = useState("");
+const [message, setMessage] = useState("");
 
-  const [speaking, setSpeaking] = useState(false);
-  const [speakingOption, setSpeakingOption] = useState("");
+const [speaking, setSpeaking] = useState(false);
+const [speakingOption, setSpeakingOption] = useState("");
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("smriti_token");
+const [wrongAttempts, setWrongAttempts] = useState(0);
+const [comfortMemory, setComfortMemory] = useState(null);
+const [showComfortMode, setShowComfortMode] = useState(false);
+const [correctAnswers, setCorrectAnswers] = useState(0);
+
+const getAuthHeaders = () => {
+const token = localStorage.getItem("smriti_token");
 
     if (!token) {
-      throw new Error("Please log in again.");
+        throw new Error("Please log in again.");
     }
 
     return {
-      Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
     };
-  };
+};
 
   useEffect(() => {
     const loadPatientLanguage = async () => {
@@ -68,6 +73,28 @@ function Therapy() {
     loadPatientLanguage();
   }, []);
 
+    useEffect(() => {
+    const loadComfortMemory = async () => {
+      try {
+        const response = await fetch(
+          `${API_URL}/memories/comfort/${PATIENT_ID}`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setComfortMemory(data);
+        }
+      } catch (error) {
+        console.error("Could not load comfort memory:", error);
+      }
+    };
+
+    loadComfortMemory();
+  }, []);
+
   const startTherapySession = async () => {
     setLoadingSession(true);
     setMessage("");
@@ -76,6 +103,7 @@ function Therapy() {
     setCurrentIndex(0);
     setSelectedAnswer("");
     setAnswerResult(null);
+    setCorrectAnswers(0);
 
     try {
       const response = await fetch(
@@ -181,6 +209,11 @@ function Therapy() {
 
       const result = await response.json();
 
+      console.log("API Result:", result);
+      console.log("Correct?", result.correct);
+      
+      
+
       if (!response.ok) {
         throw new Error(
           result.detail || "Could not check the answer."
@@ -189,13 +222,33 @@ function Therapy() {
 
       setAnswerResult(result);
 
-      if (result.correct) {
-        setMessage("✓ Correct! Great job.");
-      } else {
-        setMessage(
-          "Take another look at the memory. You can continue when ready."
-        );
-      }
+      console.log("Wrong attempts:", wrongAttempts + 1);
+      console.log("Comfort memory:", comfortMemory);
+
+if (result.correct) {
+  setCorrectAnswers((prev) => prev + 1);
+
+  setWrongAttempts(0);
+  setShowComfortMode(false);
+
+  setMessage("✓ Correct! Great job.");
+}
+
+else {
+  setWrongAttempts((prev) => {
+    const attempts = prev + 1;
+
+    if (attempts >= 2 && comfortMemory) {
+      setShowComfortMode(true);
+    }
+
+    return attempts;
+  });
+
+  setMessage(
+    "Take another look at the memory. You can continue when ready."
+  );
+}
     } catch (error) {
       setMessage(error.message);
       setSelectedAnswer("");
@@ -204,30 +257,33 @@ function Therapy() {
     }
   };
 
-  const moveToNextQuestion = async () => {
-    const currentGame = games[currentIndex];
+    const moveToNextQuestion = async () => {
+  const currentGame = games[currentIndex];
 
-    if (!currentGame || completingGame) {
+  if (!currentGame || completingGame) {
+    return;
+  }
+
+  try {
+    await completeCurrentGame(currentGame.game_id);
+
+    const nextIndex = currentIndex + 1;
+
+    if (nextIndex >= games.length) {
       return;
     }
 
-    try {
-      await completeCurrentGame(currentGame.game_id);
+    setCurrentIndex(nextIndex);
+    setSelectedAnswer("");
+    setAnswerResult(null);
+    setMessage("");
 
-      const nextIndex = currentIndex + 1;
-
-      if (nextIndex >= games.length) {
-        return;
-      }
-
-      setCurrentIndex(nextIndex);
-      setSelectedAnswer("");
-      setAnswerResult(null);
-      setMessage("");
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
+    setWrongAttempts(0);
+    setShowComfortMode(false);
+  } catch (error) {
+    setMessage(error.message);
+  }
+};
 
   const speakText = async (text, option = "") => {
     if (!text || speaking) {
@@ -769,6 +825,38 @@ function Therapy() {
                   : "🔊 Listen to Question"}
               </button>
 
+              {showComfortMode && comfortMemory && (
+  <div
+    style={{
+      marginBottom: "24px",
+      padding: "20px",
+      borderRadius: "16px",
+      background: "#fff7ed",
+      border: "2px solid #f59e0b",
+    }}
+  >
+    <h3>❤️ Memory Comfort Mode</h3>
+
+    <p>
+      That's okay. Let's take a little memory break.
+    </p>
+
+    <h4>{comfortMemory.title}</h4>
+
+    <p>{comfortMemory.content}</p>
+
+    <button
+      className="therapy-listen-button"
+      onClick={() => speakText(comfortMemory.content)}
+      disabled={speaking}
+    >
+      {speaking
+        ? "🔊 Speaking..."
+        : "🔊 Read Comfort Memory"}
+    </button>
+  </div>
+)}
+
               <div className="therapy-options">
                 {currentGame.options?.map(
                   (option, index) => (
@@ -893,8 +981,8 @@ function Therapy() {
                 </h2>
 
                 <p>
-                  You completed all 5 personalized questions.
-                  Great work!
+                  You answered <strong>{correctAnswers}</strong> out of{" "}  
+                  <strong>{session.total_games}</strong> questions correctly.
                 </p>
 
                 <p
@@ -904,8 +992,7 @@ function Therapy() {
                     fontWeight: "700",
                   }}
                 >
-                  {session.total_games} of{" "}
-                  {session.total_games} questions completed
+                  {session.total_games} of {session.total_games} questions completed
                 </p>
 
                 <button

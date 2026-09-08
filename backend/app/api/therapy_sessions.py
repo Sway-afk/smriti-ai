@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database.database import get_db
 from app.models.generated_game import GeneratedGame
@@ -10,6 +11,7 @@ from app.models.memory import Memory
 from app.models.patients import Patient
 from app.models.session_game import SessionGame
 from app.models.therapy_session import TherapySession
+from app.models.game_attempt import GameAttempt
 from app.models.user import User
 from app.services.adaptive_difficulty import get_recommended_difficulty
 from app.services.ai_game_generator import generate_ai_game
@@ -40,8 +42,23 @@ def start_therapy_session(
             detail="Patient not found",
         )
 
+    # Get the latest memory for this patient
+    memory = (
+        db.query(Memory)
+        .filter(Memory.patient_id == patient_id)
+        .order_by(Memory.id.desc())
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No memories found for this patient",
+        )
+
     session = TherapySession(
         patient_id=patient_id,
+        memory_id=memory.id,
         status="active",
         total_games=0,
         completed_games=0,
@@ -54,6 +71,7 @@ def start_therapy_session(
     return {
         "session_id": session.id,
         "patient_id": session.patient_id,
+        "memory_id": session.memory_id,
         "status": session.status,
         "total_games": session.total_games,
         "completed_games": session.completed_games,
@@ -367,14 +385,36 @@ def get_therapy_session(
             detail="Therapy session not found",
         )
 
+    wrong_answers = (
+        db.query(func.count(GameAttempt.id))
+        .filter(
+            GameAttempt.memory_id == session.memory_id,
+            GameAttempt.correct == False,
+        )
+        .scalar()
+    )
+
+    correct_answers = (
+        db.query(func.count(GameAttempt.id))
+        .filter(
+            GameAttempt.memory_id == session.memory_id,
+            GameAttempt.correct == True,
+        )
+        .scalar()
+    )
+
     return {
         "session_id": session.id,
         "patient_id": session.patient_id,
+        "memory_id": session.memory_id,
         "status": session.status,
         "total_games": session.total_games,
         "completed_games": session.completed_games,
         "started_at": session.started_at,
         "completed_at": session.completed_at,
+        "correct_answers": correct_answers,
+        "wrong_answers": wrong_answers,
+        "show_comfort_memory": wrong_answers >= 3,
     }
 
 

@@ -131,10 +131,15 @@ def check_answer(
             detail="Generated game not found"
         )
 
+    print("User answer:", repr(request.answer))
+    print("Database answer:", repr(generated_game.answer))
+
     correct = (
         request.answer.strip().lower()
         == generated_game.answer.strip().lower()
     )
+    
+    print("Correct:", correct)
 
     score = 1 if correct else 0
 
