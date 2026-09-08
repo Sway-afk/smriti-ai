@@ -1,6 +1,6 @@
 venv/
 __pycache__/
 *.pyc
-smriti.db
+*.db
 check_db.py
 .env

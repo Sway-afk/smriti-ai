@@ -13,7 +13,8 @@ def get_recommended_difficulty(
 
     Rules:
     - No attempts -> easy
-    - Accuracy below 50% -> easy
+    - Accuracy below 30% -> comfort (gentle, no-pressure mode)
+    - Accuracy 30% to below 50% -> easy
     - Accuracy 50% to below 80% -> medium
     - Accuracy 80% or higher -> hard
     """
@@ -46,6 +47,9 @@ def get_recommended_difficulty(
     accuracy = (
         correct_attempts / len(attempts)
     ) * 100
+
+    if accuracy < 30:
+        return "comfort"
 
     if accuracy < 50:
         return "easy"

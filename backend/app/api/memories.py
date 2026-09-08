@@ -28,6 +28,9 @@ def create_memory(
         category=memory.category
     )
 
+    if memory.sequence_steps:
+        new_memory.sequence_steps = memory.sequence_steps
+
     db.add(new_memory)
     db.commit()
     db.refresh(new_memory)
@@ -133,6 +136,9 @@ def update_memory(
 
     if memory_update.category is not None:
         memory.category = memory_update.category
+
+    if memory_update.sequence_steps is not None:
+        memory.sequence_steps = memory_update.sequence_steps
 
     db.commit()
     db.refresh(memory)

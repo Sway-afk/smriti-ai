@@ -1,7 +1,315 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API_URL = "http://127.0.0.1:8000";
 const PATIENT_ID = 1;
+
+// Plain (non-component) helper so the elapsed-time read lives outside
+// any component/hook body.
+function elapsedSecondsSince(startMs) {
+  if (!startMs) {
+    return 0;
+  }
+
+  return Math.round((Date.now() - startMs) / 100) / 10;
+}
+
+function MemoryMatchGame({ game, disabled, onSubmit, speakText }) {
+  const cards = game?.game_data?.cards || [];
+
+  const [revealed, setRevealed] = useState([]);
+  const [flipped, setFlipped] = useState([]);
+  const [wrongPair, setWrongPair] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  // A fresh game is a fresh mount (the parent keys this component by
+  // game_id), so plain refs started at null and filled in on mount are
+  // enough - no reset-on-prop-change effect is needed.
+  const startTimeRef = useRef(null);
+  const submittedRef = useRef(false);
+  const mistakesRef = useRef(0);
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+  }, []);
+
+  const handleCardClick = (card) => {
+    if (disabled || busy || submittedRef.current) return;
+    if (revealed.includes(card.card_id) || flipped.includes(card.card_id)) return;
+    if (flipped.length >= 2) return;
+
+    if (speakText) {
+      speakText(card.label);
+    }
+
+    const nextFlipped = [...flipped, card.card_id];
+    setFlipped(nextFlipped);
+
+    if (nextFlipped.length === 2) {
+      const [firstId, secondId] = nextFlipped;
+      const first = cards.find((item) => item.card_id === firstId);
+      const second = cards.find((item) => item.card_id === secondId);
+
+      if (first && second && first.pair_id === second.pair_id) {
+        const nextRevealed = [...revealed, firstId, secondId];
+        setRevealed(nextRevealed);
+        setFlipped([]);
+
+        if (nextRevealed.length === cards.length && !submittedRef.current) {
+          submittedRef.current = true;
+          const timeSeconds = elapsedSecondsSince(startTimeRef.current);
+          onSubmit("completed", {
+            mistakes: mistakesRef.current,
+            time_seconds: timeSeconds,
+          });
+        }
+      } else {
+        mistakesRef.current += 1;
+        setWrongPair(nextFlipped);
+        setBusy(true);
+
+        setTimeout(() => {
+          setFlipped([]);
+          setWrongPair([]);
+          setBusy(false);
+        }, 700);
+      }
+    }
+  };
+
+  if (!cards.length) {
+    return null;
+  }
+
+  return (
+    <div className="memory-match-grid">
+      {cards.map((card) => {
+        const isRevealed = revealed.includes(card.card_id);
+        const isFlipped = flipped.includes(card.card_id);
+        const isWrong = wrongPair.includes(card.card_id);
+        const faceUp = isRevealed || isFlipped;
+
+        return (
+          <button
+            key={card.card_id}
+            type="button"
+            className="memory-match-card"
+            onClick={() => handleCardClick(card)}
+            disabled={disabled || isRevealed}
+            style={{
+              background: isRevealed
+                ? "#edf3ed"
+                : isWrong
+                ? "#fbe9e3"
+                : faceUp
+                ? "#fffdf9"
+                : "#57765f",
+              color: faceUp ? "#28352f" : "#f8f5ef",
+              border: isRevealed
+                ? "2px solid #57765f"
+                : isWrong
+                ? "2px solid #c17a5c"
+                : "1px solid #e8e1d5",
+              cursor: disabled || isRevealed ? "not-allowed" : "pointer",
+            }}
+          >
+            {faceUp ? card.label : "🌿"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MemorySequenceGame({
+  game,
+  disabled,
+  onSubmit,
+  speakText,
+  speaking,
+  speakingOption,
+}) {
+  const steps = game?.game_data?.steps || [];
+
+  const [order, setOrder] = useState([]);
+  const [undoCount, setUndoCount] = useState(0);
+
+  // The parent keys this component by game_id, so each new sequence gets
+  // a fresh mount instead of needing a reset-on-prop-change effect.
+  const startTimeRef = useRef(null);
+  const submittedRef = useRef(false);
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+  }, []);
+
+  if (!steps.length) {
+    return null;
+  }
+
+  const chosenIds = new Set(order);
+
+  const handleChoose = (step) => {
+    if (disabled || submittedRef.current) return;
+    if (order.length >= steps.length || chosenIds.has(step.step_id)) return;
+
+    const nextOrder = [...order, step.step_id];
+    setOrder(nextOrder);
+
+    if (nextOrder.length === steps.length) {
+      submittedRef.current = true;
+      const timeSeconds = elapsedSecondsSince(startTimeRef.current);
+      onSubmit(JSON.stringify(nextOrder), {
+        mistakes: undoCount,
+        time_seconds: timeSeconds,
+      });
+    }
+  };
+
+  const handleUndoLast = () => {
+    if (disabled || order.length === 0 || submittedRef.current) return;
+    setOrder((current) => current.slice(0, -1));
+    setUndoCount((count) => count + 1);
+  };
+
+  const labelFor = (stepId) =>
+    steps.find((step) => step.step_id === stepId)?.label || "";
+
+  return (
+    <div>
+      <div className="sequence-slots">
+        {steps.map((_, index) => (
+          <div key={index} className="sequence-slot">
+            <span className="sequence-slot-number">{index + 1}</span>
+            <span className="sequence-slot-label">
+              {order[index] ? labelFor(order[index]) : "Tap a step below"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {order.length > 0 && !disabled && (
+        <button
+          type="button"
+          className="sequence-undo-button"
+          onClick={handleUndoLast}
+        >
+          ↩ Undo last step
+        </button>
+      )}
+
+      <div className="sequence-choices">
+        {steps.map((step) => {
+          const used = chosenIds.has(step.step_id);
+
+          return (
+            <div key={step.step_id} className="sequence-choice-row">
+              <button
+                type="button"
+                className="sequence-choice-button"
+                onClick={() => handleChoose(step)}
+                disabled={disabled || used}
+                style={{
+                  opacity: used ? 0.4 : 1,
+                  cursor: disabled || used ? "not-allowed" : "pointer",
+                }}
+              >
+                {step.label}
+              </button>
+
+              {speakText && (
+                <button
+                  type="button"
+                  className="therapy-audio-button"
+                  onClick={() => speakText(step.label, step.step_id)}
+                  disabled={speaking && speakingOption !== step.step_id}
+                  aria-label={`Listen to ${step.label}`}
+                >
+                  {speakingOption === step.step_id ? "🔊" : "🔈"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ObjectVisualRecallGame({
+  game,
+  disabled,
+  onSubmit,
+  selectedAnswer,
+  answerResult,
+  speakText,
+  speaking,
+  speakingOption,
+}) {
+  const cards = game?.game_data?.cards || [];
+
+  // The parent keys this component by game_id, so each new card set gets
+  // a fresh mount instead of needing a reset-on-prop-change effect.
+  const startTimeRef = useRef(null);
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+  }, []);
+
+  if (!cards.length) {
+    return null;
+  }
+
+  const handleChoose = (card) => {
+    if (disabled) return;
+
+    const timeSeconds = elapsedSecondsSince(startTimeRef.current);
+
+    onSubmit(card.label, { time_seconds: timeSeconds });
+  };
+
+  return (
+    <div className="visual-recall-grid">
+      {cards.map((card) => {
+        const isSelected = selectedAnswer === card.label;
+
+        return (
+          <div key={card.id} className="visual-recall-card-row">
+            <button
+              type="button"
+              className="visual-recall-card"
+              onClick={() => handleChoose(card)}
+              disabled={disabled}
+              style={{
+                border: isSelected
+                  ? answerResult?.correct
+                    ? "3px solid #57765f"
+                    : "3px solid #a05a45"
+                  : "2px solid #e8e1d5",
+                background: isSelected ? "#edf3ed" : "#fffdf9",
+                cursor: disabled ? "not-allowed" : "pointer",
+              }}
+            >
+              <span className="visual-recall-emoji">{card.emoji}</span>
+              <span className="visual-recall-label">{card.label}</span>
+            </button>
+
+            {speakText && (
+              <button
+                type="button"
+                className="therapy-audio-button"
+                onClick={() => speakText(card.label, card.id)}
+                disabled={speaking && speakingOption !== card.id}
+                aria-label={`Listen to ${card.label}`}
+              >
+                {speakingOption === card.id ? "🔊" : "🔈"}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function Therapy() {
   const [language, setLanguage] = useState("English");
@@ -151,7 +459,7 @@ function Therapy() {
     }
   };
 
-  const checkAnswer = async (answer) => {
+  const checkAnswer = async (answer, metrics = null) => {
     const currentGame = games[currentIndex];
 
     if (!currentGame || checkingAnswer || answerResult) {
@@ -175,6 +483,7 @@ function Therapy() {
             game_id: currentGame.game_id,
             answer,
             session_id: session?.session_id,
+            ...(metrics ? { metrics } : {}),
           }),
         }
       );
@@ -293,6 +602,9 @@ function Therapy() {
       pattern_recognition: "Pattern Recognition",
       object_recognition: "Object Recognition",
       emotional_engagement: "Personal Memory",
+      memory_match: "Memory Match",
+      memory_sequence: "Memory Sequence",
+      visual_recall: "Object & Visual Recall",
     };
 
     return titles[gameType] || "Cognitive Activity";
@@ -308,6 +620,9 @@ function Therapy() {
       pattern_recognition: "🧩",
       object_recognition: "👀",
       emotional_engagement: "❤️",
+      memory_match: "🃏",
+      memory_sequence: "🔢",
+      visual_recall: "🖼️",
     };
 
     return icons[gameType] || "🧠";
@@ -315,6 +630,10 @@ function Therapy() {
 
   const getDifficultyLabel = (difficulty) => {
     if (!difficulty) return "Adaptive";
+
+    if (difficulty.toLowerCase() === "comfort") {
+      return "Comfort Mode";
+    }
 
     return (
       difficulty.charAt(0).toUpperCase() +
@@ -336,6 +655,17 @@ function Therapy() {
           (sessionCompletedGames / session.total_games) * 100
         )
       : 0;
+
+  const visualGameTypes = [
+    "memory_match",
+    "memory_sequence",
+    "visual_recall",
+  ];
+
+  const hasVisualGameUi = Boolean(
+    currentGame?.game_data &&
+      visualGameTypes.includes(currentGame.game_type)
+  );
 
   return (
     <>
@@ -537,6 +867,136 @@ function Therapy() {
             cursor: pointer;
           }
 
+          .memory-match-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+          }
+
+          .memory-match-card {
+            min-height: 100px;
+            border-radius: 16px;
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+            padding: 14px;
+            transition: background 0.2s ease, border 0.2s ease;
+            overflow-wrap: anywhere;
+          }
+
+          .sequence-slots {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 18px;
+          }
+
+          .sequence-slot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 90px;
+            padding: 12px;
+            border-radius: 14px;
+            border: 2px dashed #c7d3c8;
+            background: #fffdf9;
+            text-align: center;
+          }
+
+          .sequence-slot-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            background: #57765f;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 14px;
+          }
+
+          .sequence-slot-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: #28352f;
+            overflow-wrap: anywhere;
+          }
+
+          .sequence-undo-button {
+            margin-bottom: 16px;
+            padding: 10px 16px;
+            border: 1px solid #c7d3c8;
+            border-radius: 10px;
+            background: #fffdf9;
+            color: #57765f;
+            font-weight: 700;
+            cursor: pointer;
+          }
+
+          .sequence-choices {
+            display: grid;
+            gap: 12px;
+          }
+
+          .sequence-choice-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+          }
+
+          .sequence-choice-button {
+            flex: 1;
+            min-width: 0;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 17px;
+            text-align: left;
+            border: 1px solid #e8e1d5;
+            background: #fffdf9;
+            color: #28352f;
+            overflow-wrap: anywhere;
+          }
+
+          .visual-recall-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+          }
+
+          .visual-recall-card-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+          }
+
+          .visual-recall-card {
+            flex: 1;
+            min-width: 0;
+            min-height: 110px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-radius: 16px;
+            padding: 14px;
+          }
+
+          .visual-recall-emoji {
+            font-size: 40px;
+            line-height: 1;
+          }
+
+          .visual-recall-label {
+            font-size: 16px;
+            font-weight: 700;
+            color: #28352f;
+            overflow-wrap: anywhere;
+          }
+
           .therapy-feedback {
             margin-top: 22px;
             padding: 15px;
@@ -627,6 +1087,31 @@ function Therapy() {
             .therapy-option-button {
               font-size: 16px;
               padding: 14px;
+            }
+
+            .memory-match-grid,
+            .visual-recall-grid {
+              grid-template-columns: 1fr 1fr;
+              gap: 10px;
+            }
+
+            .memory-match-card {
+              min-height: 84px;
+              font-size: 17px;
+            }
+
+            .sequence-slots {
+              grid-template-columns: 1fr;
+              gap: 8px;
+            }
+
+            .visual-recall-card {
+              min-height: 90px;
+              padding: 10px;
+            }
+
+            .visual-recall-emoji {
+              font-size: 32px;
             }
           }
 
@@ -769,72 +1254,119 @@ function Therapy() {
                   : "🔊 Listen to Question"}
               </button>
 
-              <div className="therapy-options">
-                {currentGame.options?.map(
-                  (option, index) => (
-                    <div
-                      className="therapy-option-row"
-                      key={index}
-                    >
-                      <button
-                        className="therapy-option-button"
-                        onClick={() =>
-                          checkAnswer(option)
-                        }
-                        disabled={
-                          checkingAnswer ||
-                          Boolean(answerResult)
-                        }
-                        style={{
-                          border:
-                            selectedAnswer === option
-                              ? answerResult?.correct
-                                ? "2px solid #57765f"
-                                : answerResult
-                                ? "2px solid #a05a45"
-                                : "2px solid #57765f"
-                              : "1px solid #e8e1d5",
-                          background:
-                            selectedAnswer === option
-                              ? "#edf3ed"
-                              : "#fffdf9",
-                          color: "#28352f",
-                          cursor:
-                            checkingAnswer ||
-                            answerResult
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {option}
-                      </button>
+              {hasVisualGameUi &&
+                currentGame.game_type === "memory_match" && (
+                  <MemoryMatchGame
+                    key={currentGame.game_id}
+                    game={currentGame}
+                    disabled={
+                      checkingAnswer || Boolean(answerResult)
+                    }
+                    onSubmit={checkAnswer}
+                    speakText={speakText}
+                  />
+                )}
 
-                      <button
-                        className="therapy-audio-button"
-                        onClick={() =>
-                          speakText(option, option)
-                        }
-                        disabled={
-                          speaking &&
-                          speakingOption !== option
-                        }
-                        aria-label={`Listen to ${option}`}
-                        style={{
-                          cursor:
+              {hasVisualGameUi &&
+                currentGame.game_type === "memory_sequence" && (
+                  <MemorySequenceGame
+                    key={currentGame.game_id}
+                    game={currentGame}
+                    disabled={
+                      checkingAnswer || Boolean(answerResult)
+                    }
+                    onSubmit={checkAnswer}
+                    speakText={speakText}
+                    speaking={speaking}
+                    speakingOption={speakingOption}
+                  />
+                )}
+
+              {hasVisualGameUi &&
+                currentGame.game_type === "visual_recall" && (
+                  <ObjectVisualRecallGame
+                    key={currentGame.game_id}
+                    game={currentGame}
+                    disabled={
+                      checkingAnswer || Boolean(answerResult)
+                    }
+                    onSubmit={checkAnswer}
+                    selectedAnswer={selectedAnswer}
+                    answerResult={answerResult}
+                    speakText={speakText}
+                    speaking={speaking}
+                    speakingOption={speakingOption}
+                  />
+                )}
+
+              {!hasVisualGameUi && (
+                <div className="therapy-options">
+                  {currentGame.options?.map(
+                    (option, index) => (
+                      <div
+                        className="therapy-option-row"
+                        key={index}
+                      >
+                        <button
+                          className="therapy-option-button"
+                          onClick={() =>
+                            checkAnswer(option)
+                          }
+                          disabled={
+                            checkingAnswer ||
+                            Boolean(answerResult)
+                          }
+                          style={{
+                            border:
+                              selectedAnswer === option
+                                ? answerResult?.correct
+                                  ? "2px solid #57765f"
+                                  : answerResult
+                                  ? "2px solid #a05a45"
+                                  : "2px solid #57765f"
+                                : "1px solid #e8e1d5",
+                            background:
+                              selectedAnswer === option
+                                ? "#edf3ed"
+                                : "#fffdf9",
+                            color: "#28352f",
+                            cursor:
+                              checkingAnswer ||
+                              answerResult
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                        >
+                          {option}
+                        </button>
+
+                        <button
+                          className="therapy-audio-button"
+                          onClick={() =>
+                            speakText(option, option)
+                          }
+                          disabled={
                             speaking &&
                             speakingOption !== option
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {speakingOption === option
-                          ? "🔊"
-                          : "🔈"}
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
+                          }
+                          aria-label={`Listen to ${option}`}
+                          style={{
+                            cursor:
+                              speaking &&
+                              speakingOption !== option
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                        >
+                          {speakingOption === option
+                            ? "🔊"
+                            : "🔈"}
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
 
               {answerResult && (
                 <div

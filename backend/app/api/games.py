@@ -12,6 +12,7 @@ from app.models.therapy_session import TherapySession
 from app.models.session_game import SessionGame
 from app.models.user import User
 from app.utils.roles import require_doctor_or_caregiver
+from app.services.adaptive_difficulty import get_recommended_difficulty
 from app.services.ai_game_generator import generate_ai_game
 from app.services.memory_dna import build_memory_dna
 from app.schemas.game import (
@@ -44,6 +45,9 @@ def generate_game(
         "pattern_recognition",
         "object_recognition",
         "emotional_engagement",
+        "memory_match",
+        "memory_sequence",
+        "visual_recall",
     }
 
     if game_type not in supported_game_types:
@@ -53,7 +57,8 @@ def generate_game(
                 "Unsupported game type. Use one of: "
                 "multiple_choice, true_false, fill_blank, attention, "
                 "routine_recall, pattern_recognition, object_recognition, "
-                "emotional_engagement."
+                "emotional_engagement, memory_match, memory_sequence, "
+                "visual_recall."
             )
         )
 
@@ -73,6 +78,8 @@ def generate_game(
         "id": memory.id,
         "title": memory.title,
         "content": memory.content,
+        "category": memory.category,
+        "sequence_steps": memory.sequence_steps,
         "difficulty": difficulty,
         "language": language,
         "game_type": game_type,
@@ -90,6 +97,8 @@ def generate_game(
             detail=str(error)
         )
 
+    game_data = game.get("game_data")
+
     generated_game = GeneratedGame(
         memory_id=memory.id,
         game_type=game["game_type"],
@@ -97,7 +106,8 @@ def generate_game(
         options=json.dumps(game["options"]),
         answer=game["answer"],
         difficulty=game["difficulty"],
-        language=language
+        language=language,
+        game_data=json.dumps(game_data) if game_data else None,
     )
 
     db.add(generated_game)
@@ -110,7 +120,8 @@ def generate_game(
         "memory_id": generated_game.memory_id,
         "question": generated_game.question,
         "options": json.loads(generated_game.options),
-        "difficulty": generated_game.difficulty
+        "difficulty": generated_game.difficulty,
+        "game_data": json.loads(generated_game.game_data) if generated_game.game_data else None,
     }
 
 
@@ -131,12 +142,35 @@ def check_answer(
             detail="Generated game not found"
         )
 
-    correct = (
-        request.answer.strip().lower()
-        == generated_game.answer.strip().lower()
-    )
+    if generated_game.game_type == "memory_sequence":
+        # The submitted answer is a JSON array of step ids in the order
+        # the patient tapped them. Compare it against the stored correct
+        # order rather than doing a plain string match.
+        try:
+            submitted_order = json.loads(request.answer)
+            correct_order = json.loads(generated_game.answer)
+            correct = (
+                isinstance(submitted_order, list)
+                and submitted_order == correct_order
+            )
+        except (TypeError, ValueError):
+            correct = False
+
+    elif generated_game.game_type == "memory_match":
+        # Memory Match is self-verifying on the client: pairs can only be
+        # revealed as matched by comparing the pair_id baked into the
+        # game's own card data, so any completion submission counts.
+        correct = bool(request.answer)
+
+    else:
+        correct = (
+            request.answer.strip().lower()
+            == generated_game.answer.strip().lower()
+        )
 
     score = 1 if correct else 0
+
+    metrics = request.metrics
 
     attempt = GameAttempt(
         memory_id=generated_game.memory_id,
@@ -144,7 +178,9 @@ def check_answer(
         difficulty=generated_game.difficulty,
         user_answer=request.answer,
         correct=correct,
-        score=score
+        score=score,
+        mistakes=metrics.mistakes if metrics else None,
+        time_seconds=metrics.time_seconds if metrics else None,
     )
 
     db.add(attempt)
@@ -383,6 +419,49 @@ def get_patient_game_analytics(
             2
         )
 
+    # Repeated-struggle signal: memories where the patient has tried more
+    # than once but is still getting under 40% right. Surfaced so a
+    # caregiver can see where to gently step in, or move to Comfort Mode.
+    struggling_memories = [
+        {
+            "memory_id": memory_id,
+            "memory_title": stats["memory_title"],
+            "accuracy": stats["accuracy"],
+            "total_attempts": stats["total_attempts"],
+        }
+        for memory_id, stats in memory_stats.items()
+        if stats["total_attempts"] >= 2 and stats["accuracy"] < 40
+    ]
+
+    mistake_values = [
+        attempt.mistakes
+        for attempt in attempts
+        if attempt.mistakes is not None
+    ]
+
+    time_values = [
+        attempt.time_seconds
+        for attempt in attempts
+        if attempt.time_seconds is not None
+    ]
+
+    average_mistakes = (
+        round(sum(mistake_values) / len(mistake_values), 2)
+        if mistake_values
+        else None
+    )
+
+    average_time_seconds = (
+        round(sum(time_values) / len(time_values), 2)
+        if time_values
+        else None
+    )
+
+    recommended_mode = get_recommended_difficulty(
+        patient_id=patient_id,
+        db=db,
+    )
+
     difficulty_stats = {}
 
     for attempt in attempts:
@@ -452,6 +531,14 @@ def get_patient_game_analytics(
     "memory_stats": memory_stats,
 
     "difficulty_stats": difficulty_stats,
+
+    "average_mistakes": average_mistakes,
+
+    "average_time_seconds": average_time_seconds,
+
+    "struggling_memories": struggling_memories,
+
+    "recommended_mode": recommended_mode,
 }
 
 

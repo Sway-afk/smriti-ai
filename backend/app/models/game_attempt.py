@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float
 from sqlalchemy.sql import func
 
 from app.database.database import Base
@@ -20,6 +20,13 @@ class GameAttempt(Base):
     correct = Column(Boolean, nullable=False)
 
     score = Column(Integer, nullable=False)
+
+    # Optional progress signals for the visual games (Memory Match, Memory
+    # Sequence, Object/Visual Recall). Nullable so older attempts and the
+    # existing text-question games are unaffected.
+    mistakes = Column(Integer, nullable=True)
+
+    time_seconds = Column(Float, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

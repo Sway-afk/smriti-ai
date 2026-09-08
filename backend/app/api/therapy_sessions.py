@@ -111,32 +111,37 @@ def create_daily_therapy_session(
 
     created_games = []
 
-    # Five different cognitive abilities in one daily session.
-    # Each game is still personalized from the patient's memories.
+    # The recommended SIH demo session: the three new polished games
+    # first, then two of the existing gentle text activities.
     game_plan = [
-        ("multiple_choice", 0),
-        ("attention", 1),
-        ("routine_recall", 2),
-        ("pattern_recognition", 0),
-        ("emotional_engagement", 1),
+        ("memory_match", 0),
+        ("visual_recall", 1),
+        ("memory_sequence", 2),
+        ("emotional_engagement", 0),
+        ("multiple_choice", 1),
     ]
 
     # Use up to the first three most recent memories.
     usable_memories = memories[:3]
+
+    def build_memory_data(source_memory, game_type):
+        return {
+            "id": source_memory.id,
+            "title": source_memory.title,
+            "content": source_memory.content,
+            "category": source_memory.category,
+            "sequence_steps": source_memory.sequence_steps,
+            "difficulty": recommended_difficulty,
+            "language": patient_language,
+            "game_type": game_type,
+        }
 
     for game_type, memory_index in game_plan:
         memory = usable_memories[
             memory_index % len(usable_memories)
         ]
 
-        memory_data = {
-            "id": memory.id,
-            "title": memory.title,
-            "content": memory.content,
-            "difficulty": recommended_difficulty,
-            "language": patient_language,
-            "game_type": game_type,
-        }
+        memory_data = build_memory_data(memory, game_type)
 
         try:
             game = generate_ai_game(memory_data)
@@ -153,14 +158,7 @@ def create_daily_therapy_session(
                 if fallback_memory.id == memory.id:
                     continue
 
-                fallback_data = {
-                    "id": fallback_memory.id,
-                    "title": fallback_memory.title,
-                    "content": fallback_memory.content,
-                    "difficulty": recommended_difficulty,
-                    "language": patient_language,
-                    "game_type": game_type,
-                }
+                fallback_data = build_memory_data(fallback_memory, game_type)
 
                 try:
                     game = generate_ai_game(
@@ -176,6 +174,8 @@ def create_daily_therapy_session(
             if not game_created:
                 continue
 
+        game_data = game.get("game_data")
+
         generated_game = GeneratedGame(
             memory_id=memory.id,
             game_type=game["game_type"],
@@ -184,6 +184,7 @@ def create_daily_therapy_session(
             answer=game["answer"],
             difficulty=game["difficulty"],
             language=patient_language,
+            game_data=json.dumps(game_data) if game_data else None,
         )
 
         db.add(generated_game)
@@ -210,6 +211,7 @@ def create_daily_therapy_session(
                 "options": game["options"],
                 "difficulty": generated_game.difficulty,
                 "language": patient_language,
+                "game_data": game_data,
             }
         )
 
@@ -478,6 +480,7 @@ def get_session_games(
                 "options": json.loads(game.options),
                 "difficulty": game.difficulty,
                 "completed": session_game.completed,
+                "game_data": json.loads(game.game_data) if game.game_data else None,
             }
         )
 

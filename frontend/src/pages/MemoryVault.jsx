@@ -8,6 +8,7 @@ function MemoryVault() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("family");
+  const [sequenceStepsText, setSequenceStepsText] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,6 +127,11 @@ function MemoryVault() {
     setSaving(true);
     setMessage("");
 
+    const sequenceSteps = sequenceStepsText
+      .split("\n")
+      .map((step) => step.trim())
+      .filter(Boolean);
+
     try {
       const response = await fetch(
         `${API_URL}/memories/`,
@@ -140,6 +146,10 @@ function MemoryVault() {
             title: title.trim(),
             content: content.trim(),
             category,
+            sequence_steps:
+              sequenceSteps.length >= 2
+                ? sequenceSteps
+                : null,
           }),
         }
       );
@@ -161,6 +171,7 @@ function MemoryVault() {
       setTitle("");
       setContent("");
       setCategory("family");
+      setSequenceStepsText("");
 
       setMessage(
         "✓ Memory saved successfully."
@@ -486,6 +497,13 @@ function MemoryVault() {
           min-height: 150px;
           resize: vertical;
           line-height: 1.6;
+        }
+
+        .memory-vault-hint {
+          margin: 6px 0 0;
+          color: #8a968e;
+          font-size: 12px;
+          line-height: 1.5;
         }
 
         .memory-vault-save-button {
@@ -950,6 +968,37 @@ function MemoryVault() {
                       💭 Other
                     </option>
                   </select>
+                </div>
+
+                <div className="memory-vault-field">
+                  <label
+                    className="memory-vault-label"
+                    htmlFor="memory-sequence-steps"
+                  >
+                    Order of events (optional, for Memory Sequence)
+                  </label>
+
+                  <textarea
+                    id="memory-sequence-steps"
+                    className="memory-vault-input memory-vault-textarea"
+                    value={sequenceStepsText}
+                    onChange={(event) =>
+                      setSequenceStepsText(
+                        event.target.value
+                      )
+                    }
+                    placeholder={
+                      "One step per line, in order, e.g.:\nInvitation arrives\nTravel to Jaipur\nWedding celebration"
+                    }
+                    rows={3}
+                    style={{ minHeight: "90px" }}
+                  />
+
+                  <p className="memory-vault-hint">
+                    Add 3 familiar steps in the order they happened.
+                    This powers the Memory Sequence game for this
+                    memory. Leave blank to skip.
+                  </p>
                 </div>
 
                 <button
