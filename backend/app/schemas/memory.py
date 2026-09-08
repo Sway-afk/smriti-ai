@@ -9,6 +9,7 @@ class MemoryCreate(BaseModel):
     content: str
     category: str | None = None
 
+
 class MemoryUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
@@ -21,6 +22,7 @@ class MemoryResponse(BaseModel):
     title: str
     content: str
     category: str | None = None
+    is_comfort_memory: bool
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

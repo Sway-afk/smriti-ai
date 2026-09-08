@@ -139,6 +139,63 @@ def update_memory(
 
     return memory
 
+@router.patch("/{memory_id}/comfort", response_model=MemoryResponse)
+def set_comfort_memory(
+    memory_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id)
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found"
+        )
+
+    # Remove comfort flag from all memories for this patient
+    (
+        db.query(Memory)
+        .filter(Memory.patient_id == memory.patient_id)
+        .update({"is_comfort_memory": False})
+    )
+
+    # Mark this memory as the comfort memory
+    memory.is_comfort_memory = True
+
+    db.commit()
+    db.refresh(memory)
+
+    return memory
+
+
+@router.get("/comfort/{patient_id}", response_model=MemoryResponse)
+def get_comfort_memory(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
+    memory = (
+        db.query(Memory)
+        .filter(
+            Memory.patient_id == patient_id,
+            Memory.is_comfort_memory == True,
+        )
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No comfort memory found for this patient"
+        )
+
+    return memory
+
 
 @router.delete("/{memory_id}")
 def delete_memory(

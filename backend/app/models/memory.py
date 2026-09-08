@@ -1,4 +1,12 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    DateTime,
+    Boolean,
+)
+
 from sqlalchemy.sql import func
 
 from app.database.database import Base
@@ -16,6 +24,14 @@ class Memory(Base):
     content = Column(Text, nullable=False)
 
     category = Column(String, nullable=True)
+
+    # New field
+    is_comfort_memory = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
     created_at = Column(
         DateTime(timezone=True),
