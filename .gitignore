@@ -4,3 +4,4 @@ venv/
 backend/venv/
 __pycache__/
 .vscode/
+backend/uploads/

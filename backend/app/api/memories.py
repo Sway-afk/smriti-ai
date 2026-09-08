@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -15,6 +18,19 @@ router = APIRouter(
 )
 
 
+BASE_DIR = Path(__file__).resolve().parents[2]
+UPLOAD_DIR = BASE_DIR / "uploads" / "memories"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+
 @router.post("/", response_model=MemoryResponse)
 def create_memory(
     memory: MemoryCreate,
@@ -25,7 +41,8 @@ def create_memory(
         patient_id=memory.patient_id,
         title=memory.title,
         content=memory.content,
-        category=memory.category
+        category=memory.category,
+        image_url=memory.image_url,
     )
 
     db.add(new_memory)
@@ -78,6 +95,7 @@ def get_memory_graph(
             "title": memory.title,
             "content": memory.content,
             "category": memory.category,
+            "image_url": memory.image_url,
         }
         for memory in memories
     ]
@@ -134,13 +152,76 @@ def update_memory(
     if memory_update.category is not None:
         memory.category = memory_update.category
 
+    if memory_update.image_url is not None:
+        memory.image_url = memory_update.image_url
+
     db.commit()
     db.refresh(memory)
 
     return memory
 
 
-@router.delete("/{memory_id}")
+@router.post("/{memory_id}/image", response_model=MemoryResponse)
+async def upload_memory_image(
+    memory_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_caregiver),
+):
+    memory = (
+        db.query(Memory)
+        .filter(Memory.id == memory_id)
+        .first()
+    )
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found"
+        )
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG, and WEBP images are supported"
+        )
+
+    file_data = await file.read()
+
+    if not file_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded image is empty"
+        )
+
+    if len(file_data) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="Image must be 10 MB or smaller"
+        )
+
+    extension = ALLOWED_IMAGE_TYPES[file.content_type]
+    filename = f"{uuid4().hex}{extension}"
+    destination = UPLOAD_DIR / filename
+
+    destination.write_bytes(file_data)
+
+    if memory.image_url:
+        old_filename = Path(memory.image_url).name
+        old_file = UPLOAD_DIR / old_filename
+
+        if old_file.exists():
+            old_file.unlink()
+
+    memory.image_url = f"/uploads/memories/{filename}"
+
+    db.commit()
+    db.refresh(memory)
+
+    return memory
+
+
+@router.delete("/{memory_id}", response_model=dict)
 def delete_memory(
     memory_id: int,
     db: Session = Depends(get_db),
@@ -157,6 +238,13 @@ def delete_memory(
             status_code=404,
             detail="Memory not found"
         )
+
+    if memory.image_url:
+        filename = Path(memory.image_url).name
+        image_file = UPLOAD_DIR / filename
+
+        if image_file.exists():
+            image_file.unlink()
 
     db.delete(memory)
     db.commit()

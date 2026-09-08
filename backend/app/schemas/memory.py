@@ -8,11 +8,14 @@ class MemoryCreate(BaseModel):
     title: str
     content: str
     category: str | None = None
+    image_url: str | None = None
+
 
 class MemoryUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
     category: str | None = None
+    image_url: str | None = None
 
 
 class MemoryResponse(BaseModel):
@@ -21,6 +24,7 @@ class MemoryResponse(BaseModel):
     title: str
     content: str
     category: str | None = None
+    image_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

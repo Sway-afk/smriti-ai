@@ -117,64 +117,128 @@ def create_daily_therapy_session(
         ("multiple_choice", 0),
         ("attention", 1),
         ("routine_recall", 2),
-        ("pattern_recognition", 0),
-        ("emotional_engagement", 1),
+        ("pattern_recognition", 3),
+        ("emotional_engagement", 4),
     ]
 
-    # Use up to the first three most recent memories.
-    usable_memories = memories[:3]
+    # Prefer five different recent memories instead of cycling through only
+    # the first three. Duplicate title/content memories are ignored.
+    usable_memories = []
+    seen_memory_keys = set()
 
-    for game_type, memory_index in game_plan:
-        memory = usable_memories[
+    for candidate in memories:
+        memory_key = (
+            f"{candidate.title or ''}"
+            f"::{candidate.content or ''}"
+        ).strip().lower()
+
+        if memory_key in seen_memory_keys:
+            continue
+
+        seen_memory_keys.add(memory_key)
+        usable_memories.append(candidate)
+
+        if len(usable_memories) >= 5:
+            break
+
+    if not usable_memories:
+        usable_memories = memories[:5]
+
+    used_memory_ids = set()
+    used_answers = set()
+
+    for game_number, (game_type, memory_index) in enumerate(game_plan):
+        preferred_memory = usable_memories[
             memory_index % len(usable_memories)
         ]
 
-        memory_data = {
-            "id": memory.id,
-            "title": memory.title,
-            "content": memory.content,
-            "difficulty": recommended_difficulty,
-            "language": patient_language,
-            "game_type": game_type,
-        }
+        # When at least five distinct memories exist, use a different memory
+        # for each question. When fewer exist, rotate through them.
+        candidate_memories = [preferred_memory]
+        candidate_memories.extend(
+            memory
+            for memory in usable_memories
+            if memory.id != preferred_memory.id
+        )
 
-        try:
-            game = generate_ai_game(memory_data)
+        if len(usable_memories) >= 5:
+            unused_memories = [
+                memory
+                for memory in candidate_memories
+                if memory.id not in used_memory_ids
+            ]
 
-        except ValueError as error:
-            print(
-    f"Game generation failed: "
-    f"type={game_type}, memory_id={memory.id}, error={error}"
-)
-            # Try another memory for the same cognitive game type.
-            game_created = False
+            if unused_memories:
+                candidate_memories = unused_memories
 
-            for fallback_memory in usable_memories:
-                if fallback_memory.id == memory.id:
-                    continue
+        game = None
+        memory = None
 
-                fallback_data = {
-                    "id": fallback_memory.id,
-                    "title": fallback_memory.title,
-                    "content": fallback_memory.content,
+        # Try to avoid repeating the exact same correct answer within the
+        # five-question session by trying other memories first.
+        for candidate_memory in candidate_memories:
+            memory_data = {
+                "id": candidate_memory.id,
+                "title": candidate_memory.title,
+                "content": candidate_memory.content,
+                "difficulty": recommended_difficulty,
+                "language": patient_language,
+                "game_type": game_type,
+            }
+
+            try:
+                candidate_game = generate_ai_game(memory_data)
+            except ValueError as error:
+                print(
+                    f"Game generation failed: "
+                    f"type={game_type}, "
+                    f"memory_id={candidate_memory.id}, "
+                    f"error={error}"
+                )
+                continue
+
+            answer_key = str(
+                candidate_game.get("answer", "")
+            ).strip().casefold()
+
+            if answer_key and answer_key in used_answers:
+                continue
+
+            game = candidate_game
+            memory = candidate_memory
+            break
+
+        # If every candidate repeats an answer, keep a valid generated game
+        # rather than failing the whole five-question session.
+        if game is None:
+            for candidate_memory in candidate_memories:
+                memory_data = {
+                    "id": candidate_memory.id,
+                    "title": candidate_memory.title,
+                    "content": candidate_memory.content,
                     "difficulty": recommended_difficulty,
                     "language": patient_language,
                     "game_type": game_type,
                 }
 
                 try:
-                    game = generate_ai_game(
-                        fallback_data
-                    )
-                    memory = fallback_memory
-                    game_created = True
+                    game = generate_ai_game(memory_data)
+                    memory = candidate_memory
                     break
-
                 except ValueError:
                     continue
 
-            if not game_created:
-                continue
+        if game is None or memory is None:
+            continue
+
+        used_memory_ids.add(memory.id)
+
+        answer_key = str(
+            game.get("answer", "")
+        ).strip().casefold()
+
+        if answer_key:
+            used_answers.add(answer_key)
 
         generated_game = GeneratedGame(
             memory_id=memory.id,
@@ -205,6 +269,7 @@ def create_daily_therapy_session(
                 "game_id": generated_game.id,
                 "memory_id": memory.id,
                 "memory_title": memory.title,
+                "memory_image_url": memory.image_url,
                 "game_type": generated_game.game_type,
                 "question": generated_game.question,
                 "options": game["options"],
@@ -470,9 +535,20 @@ def get_session_games(
         if game is None:
             continue
 
+        memory = (
+            db.query(Memory)
+            .filter(Memory.id == game.memory_id)
+            .first()
+        )
+
         games.append(
             {
                 "game_id": game.id,
+                "memory_id": game.memory_id,
+                "memory_title": memory.title if memory else None,
+                "memory_image_url": (
+                    memory.image_url if memory else None
+                ),
                 "game_type": game.game_type,
                 "question": game.question,
                 "options": json.loads(game.options),

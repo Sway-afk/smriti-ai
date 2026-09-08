@@ -3,6 +3,39 @@ import { useEffect, useState } from "react";
 const API_URL = "http://127.0.0.1:8000";
 const PATIENT_ID = 1;
 
+const FAVORITE_COLOR_MAP = {
+  blue: "#4f7cff",
+  green: "#57765f",
+  purple: "#7c5cff",
+  pink: "#e56b8a",
+  orange: "#e58b3a",
+  yellow: "#c8a53a",
+  red: "#c45a5a",
+  teal: "#4ea7a0",
+  brown: "#946b45",
+};
+
+const resolveFavoriteColor = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (!normalized) {
+    return "#57765f";
+  }
+
+  if (FAVORITE_COLOR_MAP[normalized]) {
+    return FAVORITE_COLOR_MAP[normalized];
+  }
+
+  if (
+    /^#[0-9a-f]{3}$/i.test(normalized) ||
+    /^#[0-9a-f]{6}$/i.test(normalized)
+  ) {
+    return normalized;
+  }
+
+  return "#57765f";
+};
+
 function PatientProfile() {
   const [patient, setPatient] = useState(null);
   const [form, setForm] = useState({
@@ -307,6 +340,47 @@ function PatientProfile() {
           line-height: 1.5;
         }
 
+        .patient-profile-color-preview {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+          padding: 10px 12px;
+          border: 1px solid #e6e2d8;
+          border-radius: 12px;
+          background: #fbfaf7;
+        }
+
+        .patient-profile-color-swatch {
+          width: 24px;
+          height: 24px;
+          flex: 0 0 24px;
+          border-radius: 8px;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+        }
+
+        .patient-profile-color-preview-text {
+          min-width: 0;
+        }
+
+        .patient-profile-color-preview-label {
+          margin: 0;
+          color: #8a968e;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.7px;
+        }
+
+        .patient-profile-color-preview-value {
+          margin: 2px 0 0;
+          color: #28352f;
+          font-size: 13px;
+          font-weight: 700;
+          overflow-wrap: anywhere;
+        }
+
         .patient-profile-save-row {
           display: flex;
           align-items: center;
@@ -514,7 +588,37 @@ function PatientProfile() {
                     placeholder="e.g. Blue"
                     value={form.favorite_color}
                     onChange={handleChange}
+                    style={{
+                      borderColor: form.favorite_color
+                        ? resolveFavoriteColor(
+                            form.favorite_color
+                          )
+                        : undefined,
+                    }}
                   />
+
+                  <div className="patient-profile-color-preview">
+                    <div
+                      className="patient-profile-color-swatch"
+                      style={{
+                        background:
+                          resolveFavoriteColor(
+                            form.favorite_color
+                          ),
+                      }}
+                    />
+
+                    <div className="patient-profile-color-preview-text">
+                      <p className="patient-profile-color-preview-label">
+                        Color preview
+                      </p>
+
+                      <p className="patient-profile-color-preview-value">
+                        {form.favorite_color.trim() ||
+                          "No favorite color selected yet"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="patient-profile-field">

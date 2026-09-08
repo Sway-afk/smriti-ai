@@ -6,6 +6,7 @@ const PATIENT_ID = 1;
 function Therapy() {
   const [language, setLanguage] = useState("English");
   const [loadingLanguage, setLoadingLanguage] = useState(true);
+  const [patientProfile, setPatientProfile] = useState(null);
 
   const [session, setSession] = useState(null);
   const [games, setGames] = useState([]);
@@ -33,6 +34,26 @@ function Therapy() {
     return {
       Authorization: `Bearer ${token}`,
     };
+  };
+
+  const loadPatientProfile = async () => {
+    try {
+      const response = await fetch(`${API_URL}/patients/${PATIENT_ID}`, {
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Could not load patient preferences."
+        );
+      }
+
+      setPatientProfile(data);
+    } catch (error) {
+      setMessage(error.message);
+    }
   };
 
   useEffect(() => {
@@ -66,6 +87,7 @@ function Therapy() {
     };
 
     loadPatientLanguage();
+    loadPatientProfile();
   }, []);
 
   const startTherapySession = async () => {
@@ -283,6 +305,18 @@ function Therapy() {
 
   const currentGame = games[currentIndex] || null;
 
+  const favoriteAnimal = patientProfile?.favorite_animal || "";
+  const favoriteActivity = patientProfile?.favorite_activity || "";
+  const favoriteFood = patientProfile?.favorite_food || "";
+  const favoritePlace = patientProfile?.favorite_place || "";
+
+  const familiarCues = [
+    favoriteAnimal && `🐾 ${favoriteAnimal}`,
+    favoriteActivity && `🌱 ${favoriteActivity}`,
+    favoriteFood && `🍚 ${favoriteFood}`,
+    favoritePlace && `📍 ${favoritePlace}`,
+  ].filter(Boolean);
+
   const getCognitiveTitle = (gameType) => {
     const titles = {
       multiple_choice: "Memory Recall",
@@ -486,6 +520,46 @@ function Therapy() {
             margin: 0 0 18px;
           }
 
+          .therapy-memory-image-wrapper {
+            width: 100%;
+            margin: 0 0 24px;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #f1eee7;
+            border: 1px solid #e8e1d5;
+          }
+
+          .therapy-memory-image {
+            display: block;
+            width: 100%;
+            max-height: 360px;
+            object-fit: cover;
+          }
+
+          .therapy-familiar-card {
+            margin: 20px 0 24px;
+            padding: 16px 18px;
+            border: 1px solid #e1e7df;
+            border-radius: 16px;
+            background: #f7f8f3;
+          }
+
+          .therapy-familiar-label {
+            margin: 0 0 8px;
+            color: #57765f;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+          }
+
+          .therapy-familiar-text {
+            margin: 0;
+            color: #66736b;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
           .therapy-question {
             color: #28352f;
             font-size: 30px;
@@ -628,6 +702,10 @@ function Therapy() {
               font-size: 16px;
               padding: 14px;
             }
+
+            .therapy-memory-image {
+              max-height: 280px;
+            }
           }
 
           @media (max-width: 390px) {
@@ -746,6 +824,32 @@ function Therapy() {
                   ⚡ {getDifficultyLabel(currentGame.difficulty)}
                 </span>
               </div>
+
+              {currentGame.memory_image_url && (
+                <div className="therapy-memory-image-wrapper">
+                  <img
+                    className="therapy-memory-image"
+                    src={
+                      currentGame.memory_image_url.startsWith("http")
+                        ? currentGame.memory_image_url
+                        : `${API_URL}${currentGame.memory_image_url}`
+                    }
+                    alt={`Memory: ${currentGame.memory_title}`}
+                  />
+                </div>
+              )}
+
+              {familiarCues.length > 0 && (
+                <div className="therapy-familiar-card">
+                  <p className="therapy-familiar-label">
+                    ❤️ Familiar to you
+                  </p>
+
+                  <p className="therapy-familiar-text">
+                    {familiarCues.join(" · ")}
+                  </p>
+                </div>
+              )}
 
               <h2 className="therapy-question">
                 {currentGame.question}

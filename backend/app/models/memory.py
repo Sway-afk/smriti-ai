@@ -17,6 +17,10 @@ class Memory(Base):
 
     category = Column(String, nullable=True)
 
+    # Optional photo associated with this memory.
+    # Stores a relative URL/path that the frontend can display.
+    image_url = Column(String, nullable=True)
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()

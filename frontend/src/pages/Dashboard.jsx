@@ -347,6 +347,28 @@ function Dashboard({
 
   const patient = dashboard?.patient || {};
   const favoriteAnimal = patientProfile?.favorite_animal || "";
+  const favoriteActivity = patientProfile?.favorite_activity || "";
+  const favoriteFood = patientProfile?.favorite_food || "";
+  const favoritePlace = patientProfile?.favorite_place || "";
+  const favoriteColor = patientProfile?.favorite_color || "";
+
+  const favoriteColorMap = {
+    blue: "#4f7cff",
+    green: "#57765f",
+    purple: "#7c5db2",
+    pink: "#d46a92",
+    orange: "#d8893b",
+    yellow: "#c7a430",
+    red: "#c65f59",
+    teal: "#3c8f91",
+    brown: "#8b6f52",
+  };
+
+  const personalizedPrimaryColor =
+    favoriteColorMap[
+      favoriteColor.trim().toLowerCase()
+    ] || "#57765f";
+
   const overallProgress =
     dashboard?.overall_progress || {};
   const recentActivity =
@@ -762,6 +784,70 @@ function Dashboard({
           margin: 0;
           color: #28352f;
           font-size: 17px;
+          font-weight: 700;
+          overflow-wrap: anywhere;
+        }
+
+        .dashboard-familiar-card {
+          margin-top: 22px;
+          padding: 18px;
+          border: 1px solid #e4e9df;
+          border-radius: 16px;
+          background: linear-gradient(
+            135deg,
+            #fbfaf7,
+            #f2f6ef
+          );
+        }
+
+        .dashboard-familiar-title {
+          margin: 0 0 5px;
+          color: #28352f;
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .dashboard-familiar-subtitle {
+          margin: 0 0 14px;
+          color: #738078;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .dashboard-familiar-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            3,
+            minmax(0, 1fr)
+          );
+          gap: 10px;
+        }
+
+        .dashboard-familiar-item {
+          min-width: 0;
+          padding: 12px;
+          border-radius: 12px;
+          background: rgba(
+            255,
+            255,
+            255,
+            0.82
+          );
+        }
+
+        .dashboard-familiar-label {
+          margin: 0 0 5px;
+          color: #8a968e;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: .7px;
+        }
+
+        .dashboard-familiar-value {
+          margin: 0;
+          color: #28352f;
+          font-size: 14px;
           font-weight: 700;
           overflow-wrap: anywhere;
         }
@@ -1427,6 +1513,10 @@ function Dashboard({
             grid-template-columns: 1fr;
           }
 
+          .dashboard-familiar-grid {
+            grid-template-columns: 1fr;
+          }
+
           .dashboard-panel {
             padding: 20px;
             border-radius: 18px;
@@ -1510,7 +1600,14 @@ function Dashboard({
         }
       `}</style>
 
-      <div className="dashboard-page">
+        <div
+  className="dashboard-page"
+  style={{
+    borderTop: favoriteColor
+      ? `6px solid ${favoriteColor.toLowerCase() === "blue" ? "#4f7cff" : "#57765f"}`
+      : undefined,
+  }}
+>
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div className="dashboard-header-content">
@@ -1637,6 +1734,60 @@ function Dashboard({
                   </div>
                 </div>
 
+                {(favoriteActivity ||
+                  favoriteFood ||
+                  favoritePlace) && (
+                  <div
+                    className="dashboard-familiar-card"
+                    style={{
+                      borderLeft: `4px solid ${personalizedPrimaryColor}`,
+                    }}
+                  >
+                    <p className="dashboard-familiar-title">
+                      What feels familiar?
+                    </p>
+
+                    <p className="dashboard-familiar-subtitle">
+                      Keep these personal preferences in mind during care and therapy.
+                    </p>
+
+                    <div className="dashboard-familiar-grid">
+                      {favoriteActivity && (
+                        <div className="dashboard-familiar-item">
+                          <p className="dashboard-familiar-label">
+                            🌱 Favorite Activity
+                          </p>
+                          <p className="dashboard-familiar-value">
+                            {favoriteActivity}
+                          </p>
+                        </div>
+                      )}
+
+                      {favoriteFood && (
+                        <div className="dashboard-familiar-item">
+                          <p className="dashboard-familiar-label">
+                            🍚 Favorite Food
+                          </p>
+                          <p className="dashboard-familiar-value">
+                            {favoriteFood}
+                          </p>
+                        </div>
+                      )}
+
+                      {favoritePlace && (
+                        <div className="dashboard-familiar-item">
+                          <p className="dashboard-familiar-label">
+                            📍 Favorite Place
+                          </p>
+                          <p className="dashboard-familiar-value">
+                            {favoritePlace}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="dashboard-activity">
                   <h3 className="dashboard-subheading">
                     Recent Activity
@@ -1700,7 +1851,7 @@ function Dashboard({
 
                 {favoriteAnimal && (
                   <p className="memory-graph-intro">
-                    🐘 A familiar favorite: {favoriteAnimal}
+                    ❤️ A familiar favorite: {favoriteAnimal}
                   </p>
                 )}
 
@@ -2509,16 +2660,24 @@ function Dashboard({
                     onClick={
                       onOpenMemoryVault
                     }
+                    style={{
+                      background:
+                        personalizedPrimaryColor,
+                    }}
                   >
                     📖 Open Memory Vault
                   </button>
 
                   <button
-                    className="dashboard-action-button dashboard-secondary-action"
-                    onClick={
-                      onOpenVoiceMemory
-                    }
-                  >
+  className="dashboard-action-button dashboard-secondary-action"
+  onClick={
+    onOpenVoiceMemory
+  }
+  style={{
+    borderColor: personalizedPrimaryColor,
+    color: personalizedPrimaryColor,
+  }}
+>
                     🎙 Record a Voice Memory
                   </button>
 

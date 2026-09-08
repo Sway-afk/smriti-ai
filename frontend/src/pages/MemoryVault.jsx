@@ -8,6 +8,8 @@ function MemoryVault() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("family");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,7 +52,7 @@ function MemoryVault() {
       setLoading(true);
 
       const response = await fetch(
-        `${API_URL}/memories/?patient_id=${PATIENT_ID}`,
+        `${API_URL}/memories/?patient_id=${PATIENT_ID}&limit=100`,
         {
           headers: getAuthHeaders(),
         }
@@ -109,6 +111,18 @@ function MemoryVault() {
   };
 
   useEffect(() => {
+    if (!selectedImage) {
+      setImagePreview("");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(selectedImage);
+    setImagePreview(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [selectedImage]);
+
+  useEffect(() => {
     loadMemories();
     loadPatientLanguage();
   }, []);
@@ -153,17 +167,48 @@ function MemoryVault() {
         );
       }
 
+      let savedMemory = data;
+
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append("file", selectedImage);
+
+        const imageResponse = await fetch(
+          `${API_URL}/memories/${data.id}/image`,
+          {
+            method: "POST",
+            headers: getAuthHeaders(),
+            body: formData,
+          }
+        );
+
+        const imageData = await imageResponse.json();
+
+        if (!imageResponse.ok) {
+          throw new Error(
+            imageData.detail ||
+              "Memory saved, but the photo could not be uploaded."
+          );
+        }
+
+        savedMemory = imageData;
+      }
+
       setMemories((current) => [
-        data,
+        savedMemory,
         ...current,
       ]);
 
       setTitle("");
       setContent("");
       setCategory("family");
+      setSelectedImage(null);
+      setImagePreview("");
 
       setMessage(
-        "✓ Memory saved successfully."
+        selectedImage
+          ? "✓ Memory and photo saved successfully."
+          : "✓ Memory saved successfully."
       );
     } catch (error) {
       setMessage(error.message);
@@ -952,6 +997,91 @@ function MemoryVault() {
                   </select>
                 </div>
 
+                <div className="memory-vault-field">
+                  <label
+                    className="memory-vault-label"
+                    htmlFor="memory-photo"
+                  >
+                    Memory photo{" "}
+                    <span
+                      style={{
+                        color: "#8a968e",
+                        fontWeight: 600,
+                      }}
+                    >
+                      (optional)
+                    </span>
+                  </label>
+
+                  <input
+                    id="memory-photo"
+                    className="memory-vault-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => {
+                      const file =
+                        event.target.files?.[0] ||
+                        null;
+
+                      if (!file) {
+                        setSelectedImage(null);
+                        setImagePreview("");
+                        return;
+                      }
+
+                      if (
+                        file.size >
+                        10 * 1024 * 1024
+                      ) {
+                        setSelectedImage(null);
+                        setImagePreview("");
+                        event.target.value = "";
+                        setMessage(
+                          "Photo must be 10 MB or smaller."
+                        );
+                        return;
+                      }
+
+                      setSelectedImage(file);
+                      setMessage("");
+                    }}
+                  />
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#8a968e",
+                      fontSize: "12px",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    JPG, PNG, or WEBP · up to 10 MB
+                  </p>
+
+                  {imagePreview && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        overflow: "hidden",
+                        borderRadius: "14px",
+                        border: "1px solid #e1e6df",
+                        background: "#f4f6f1",
+                      }}
+                    >
+                      <img
+                        src={imagePreview}
+                        alt="Selected memory preview"
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          maxHeight: "240px",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   className="memory-vault-save-button"
@@ -1073,6 +1203,35 @@ function MemoryVault() {
                           {memory.title}
                         </h3>
 
+                        {memory.image_url && (
+                          <div
+                            style={{
+                              marginBottom: "16px",
+                              overflow: "hidden",
+                              borderRadius: "15px",
+                              border: "1px solid #e1e6df",
+                              background: "#f4f6f1",
+                            }}
+                          >
+                            <img
+                              src={
+                                memory.image_url.startsWith(
+                                  "http"
+                                )
+                                  ? memory.image_url
+                                  : `${API_URL}${memory.image_url}`
+                              }
+                              alt={`Photo for ${memory.title}`}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                maxHeight: "300px",
+                                objectFit: "cover",
+                              }}
+                            />
+                          </div>
+                        )}
+
                         <p className="memory-vault-memory-content">
                           {getMemoryPreview(
                             memory.content
@@ -1147,6 +1306,33 @@ function MemoryVault() {
                                 🌐 {language}
                               </span>
                             </div>
+
+                            {memory.image_url && (
+                              <div
+                                style={{
+                                  marginBottom: "18px",
+                                  overflow: "hidden",
+                                  borderRadius: "14px",
+                                  border: "1px solid #dfe6de",
+                                  background: "#ffffff",
+                                }}
+                              >
+                                <img
+                                  src={
+                                    memory.image_url.startsWith("http")
+                                      ? memory.image_url
+                                      : `${API_URL}${memory.image_url}`
+                                  }
+                                  alt={`Memory therapy cue for ${memory.title}`}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    maxHeight: "280px",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              </div>
+                            )}
 
                             <h4 className="memory-vault-game-question">
                               {game.question}
