@@ -9,6 +9,10 @@ class MemoryCreate(BaseModel):
     content: str
     category: str | None = None
     image_url: str | None = None
+    # Optional ordered sequence of familiar steps (e.g. for a wedding trip:
+    # ["Invitation arrives", "Travel to Jaipur", "Wedding celebration"]).
+    # Powers the Memory Sequence game without ever inventing events.
+    sequence_steps: list[str] | None = None
 
 
 class MemoryUpdate(BaseModel):
@@ -16,6 +20,7 @@ class MemoryUpdate(BaseModel):
     content: str | None = None
     category: str | None = None
     image_url: str | None = None
+    sequence_steps: list[str] | None = None
 
 
 class MemoryResponse(BaseModel):
@@ -25,6 +30,7 @@ class MemoryResponse(BaseModel):
     content: str
     category: str | None = None
     image_url: str | None = None
+    sequence_steps: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

@@ -45,6 +45,9 @@ def create_memory(
         image_url=memory.image_url,
     )
 
+    if memory.sequence_steps:
+        new_memory.sequence_steps = memory.sequence_steps
+
     db.add(new_memory)
     db.commit()
     db.refresh(new_memory)
@@ -154,6 +157,9 @@ def update_memory(
 
     if memory_update.image_url is not None:
         memory.image_url = memory_update.image_url
+
+    if memory_update.sequence_steps is not None:
+        memory.sequence_steps = memory_update.sequence_steps
 
     db.commit()
     db.refresh(memory)

@@ -30,10 +30,23 @@ LANGUAGE_CODES = {
 
 def get_ffmpeg_path() -> str | None:
     """
-    Find FFmpeg from PATH.
+    Find FFmpeg from PATH, falling back to the portable static binary
+    bundled by imageio-ffmpeg when it isn't installed system-wide. This
+    avoids requiring every caregiver to manually install FFmpeg and edit
+    their PATH just to use the voice memory feature.
     """
 
-    return shutil.which("ffmpeg")
+    ffmpeg_path = shutil.which("ffmpeg")
+
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
 
 
 def transcribe_audio_file(

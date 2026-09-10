@@ -23,6 +23,11 @@ class GeneratedGame(Base):
 
     language = Column(String, nullable=False, default="English")
 
+    # Optional structured payload for richer game UIs (Memory Match cards,
+    # Memory Sequence steps, Object/Visual Recall icon metadata, etc).
+    # Stored as a JSON-encoded string so existing games are unaffected.
+    game_data = Column(Text, nullable=True)
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()

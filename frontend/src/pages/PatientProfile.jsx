@@ -1,40 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { Alert } from "../components/ui/alert";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Input, Label, Textarea } from "../components/ui/input";
+import { applyPatientTheme } from "../lib/theme";
 
 const API_URL = "http://127.0.0.1:8000";
 const PATIENT_ID = 1;
 
-const FAVORITE_COLOR_MAP = {
-  blue: "#4f7cff",
-  green: "#57765f",
-  purple: "#7c5cff",
-  pink: "#e56b8a",
-  orange: "#e58b3a",
-  yellow: "#c8a53a",
-  red: "#c45a5a",
-  teal: "#4ea7a0",
-  brown: "#946b45",
-};
+const selectClassName =
+  "flex h-[52px] w-full rounded-xl border border-input bg-card px-4 py-3 text-base text-foreground transition-colors outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50";
 
-const resolveFavoriteColor = (value) => {
-  const normalized = String(value || "").trim().toLowerCase();
-
-  if (!normalized) {
-    return "#57765f";
-  }
-
-  if (FAVORITE_COLOR_MAP[normalized]) {
-    return FAVORITE_COLOR_MAP[normalized];
-  }
-
-  if (
-    /^#[0-9a-f]{3}$/i.test(normalized) ||
-    /^#[0-9a-f]{6}$/i.test(normalized)
-  ) {
-    return normalized;
-  }
-
-  return "#57765f";
-};
+const LANGUAGE_OPTIONS = ["English", "Hindi", "Bengali", "Assamese"];
 
 function PatientProfile() {
   const [patient, setPatient] = useState(null);
@@ -49,12 +27,19 @@ function PatientProfile() {
     favorite_food: "",
     favorite_place: "",
     comfort_memory: "",
+    comfort_memory_id: "",
   });
+
+  const [memories, setMemories] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // Tracks the last-SAVED favorite color so the live color preview can be
+  // reverted if the caregiver navigates away without saving.
+  const savedFavoriteColorRef = useRef("");
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("smriti_token");
@@ -103,7 +88,11 @@ function PatientProfile() {
           favorite_food: data.favorite_food || "",
           favorite_place: data.favorite_place || "",
           comfort_memory: data.comfort_memory || "",
+          comfort_memory_id: data.comfort_memory_id ?? "",
         });
+
+        savedFavoriteColorRef.current = data.favorite_color || "";
+        applyPatientTheme(data.favorite_color);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -111,7 +100,37 @@ function PatientProfile() {
       }
     };
 
+    const loadMemories = async () => {
+      try {
+        const response = await fetch(
+          `${API_URL}/memories/?patient_id=${PATIENT_ID}&limit=100`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setMemories(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        // The comfort-memory picker just stays empty if this fails; it
+        // isn't required to load or save the rest of the profile.
+      }
+    };
+
     loadPatient();
+    loadMemories();
+  }, []);
+
+  // If the caregiver leaves this page with an unsaved favorite-color
+  // preview still applied, revert the app back to the last-saved theme
+  // rather than leaving the preview color leaked into the rest of the app.
+  useEffect(() => {
+    return () => {
+      applyPatientTheme(savedFavoriteColorRef.current);
+    };
   }, []);
 
   const handleChange = (event) => {
@@ -121,6 +140,10 @@ function PatientProfile() {
       ...current,
       [name]: value,
     }));
+
+    if (name === "favorite_color") {
+      applyPatientTheme(value);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -156,6 +179,9 @@ function PatientProfile() {
               form.favorite_place.trim() || null,
             comfort_memory:
               form.comfort_memory.trim() || null,
+            comfort_memory_id: form.comfort_memory_id
+              ? Number(form.comfort_memory_id)
+              : null,
           }),
         }
       );
@@ -181,7 +207,11 @@ function PatientProfile() {
         favorite_food: data.favorite_food || "",
         favorite_place: data.favorite_place || "",
         comfort_memory: data.comfort_memory || "",
+        comfort_memory_id: data.comfort_memory_id ?? "",
       });
+
+      savedFavoriteColorRef.current = data.favorite_color || "";
+      applyPatientTheme(data.favorite_color);
 
       setMessage("✓ Patient preferences saved successfully.");
     } catch (err) {
@@ -193,322 +223,62 @@ function PatientProfile() {
 
   if (loading) {
     return (
-      <div className="patient-profile-page">
-        <div className="patient-profile-message">
-          Loading patient profile...
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 py-24 text-lg font-bold text-primary">
+        Loading patient profile...
       </div>
     );
   }
 
   if (error && !patient) {
     return (
-      <div className="patient-profile-page">
-        <div className="patient-profile-error">
-          <h2>Unable to load profile</h2>
-          <p>{error}</p>
-        </div>
+      <div className="min-h-screen bg-background px-4 pt-24 pb-12 sm:px-[5%] lg:px-[7%]">
+        <Card className="mx-auto max-w-[700px] p-8 text-center">
+          <h2 className="mb-2.5 text-2xl text-foreground">
+            Unable to load profile
+          </h2>
+
+          <p className="leading-relaxed text-destructive">{error}</p>
+        </Card>
       </div>
     );
   }
 
   return (
-    <>
-      <style>{`
-        .patient-profile-page {
-          min-height: 100vh;
-          background: #f8f5ef;
-          padding: 50px 7%;
-          box-sizing: border-box;
-          color: #28352f;
-          font-family: Arial, Helvetica, sans-serif;
-        }
+    <div className="min-h-screen bg-background px-4 pt-24 pb-12 sm:px-[5%] lg:px-[7%]">
+      <div className="mx-auto max-w-[900px]">
+        <div className="mb-7 animate-fade-up">
+          <p className="mb-2 text-sm font-bold tracking-wide text-primary">
+            SMRITI AI · PATIENT PERSONALIZATION
+          </p>
 
-        .patient-profile-container {
-          max-width: 900px;
-          margin: 0 auto;
-        }
+          <h1 className="mb-2.5 text-3xl leading-tight text-foreground sm:text-4xl lg:text-[42px]">
+            Personalize the care experience.
+          </h1>
 
-        .patient-profile-header {
-          margin-bottom: 28px;
-        }
+          <p className="max-w-[720px] text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Save the things that make this person feel familiar,
+            comfortable, and understood. These preferences can
+            later guide the app&apos;s visuals, activities, and comfort
+            experience.
+          </p>
+        </div>
 
-        .patient-profile-label {
-          margin: 0 0 8px;
-          color: #57765f;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 1px;
-        }
-
-        .patient-profile-title {
-          margin: 0 0 10px;
-          color: #28352f;
-          font-size: 42px;
-          line-height: 1.15;
-        }
-
-        .patient-profile-subtitle {
-          margin: 0;
-          max-width: 720px;
-          color: #66736b;
-          font-size: 17px;
-          line-height: 1.6;
-        }
-
-        .patient-profile-card {
-          background: #fffdf9;
-          border: 1px solid #e8e1d5;
-          border-radius: 22px;
-          padding: 30px;
-          box-sizing: border-box;
-          box-shadow: 0 10px 30px rgba(48, 59, 52, 0.05);
-        }
-
-        .patient-profile-section {
-          margin-bottom: 28px;
-        }
-
-        .patient-profile-section:last-of-type {
-          margin-bottom: 0;
-        }
-
-        .patient-profile-section-title {
-          margin: 0 0 6px;
-          color: #28352f;
-          font-size: 20px;
-        }
-
-        .patient-profile-section-description {
-          margin: 0 0 18px;
-          color: #738078;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-
-        .patient-profile-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 16px;
-        }
-
-        .patient-profile-field {
-          display: grid;
-          gap: 7px;
-        }
-
-        .patient-profile-field.full {
-          grid-column: 1 / -1;
-        }
-
-        .patient-profile-field label {
-          color: #66736b;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .patient-profile-field input,
-        .patient-profile-field textarea,
-        .patient-profile-field select {
-          width: 100%;
-          box-sizing: border-box;
-          border: 1px solid #d9dfd7;
-          border-radius: 12px;
-          background: #ffffff;
-          color: #28352f;
-          padding: 12px 13px;
-          font: inherit;
-          outline: none;
-        }
-
-        .patient-profile-field input:focus,
-        .patient-profile-field textarea:focus,
-        .patient-profile-field select:focus {
-          border-color: #57765f;
-          box-shadow: 0 0 0 3px rgba(87, 118, 95, 0.1);
-        }
-
-        .patient-profile-field textarea {
-          min-height: 100px;
-          resize: vertical;
-        }
-
-        .patient-profile-help {
-          margin: 7px 0 0;
-          color: #8a968e;
-          font-size: 12px;
-          line-height: 1.5;
-        }
-
-        .patient-profile-color-preview {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-top: 10px;
-          padding: 10px 12px;
-          border: 1px solid #e6e2d8;
-          border-radius: 12px;
-          background: #fbfaf7;
-        }
-
-        .patient-profile-color-swatch {
-          width: 24px;
-          height: 24px;
-          flex: 0 0 24px;
-          border-radius: 8px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
-        }
-
-        .patient-profile-color-preview-text {
-          min-width: 0;
-        }
-
-        .patient-profile-color-preview-label {
-          margin: 0;
-          color: #8a968e;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.7px;
-        }
-
-        .patient-profile-color-preview-value {
-          margin: 2px 0 0;
-          color: #28352f;
-          font-size: 13px;
-          font-weight: 700;
-          overflow-wrap: anywhere;
-        }
-
-        .patient-profile-save-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          margin-top: 28px;
-          padding-top: 22px;
-          border-top: 1px solid #eee8de;
-        }
-
-        .patient-profile-message {
-          color: #57765f;
-          font-weight: 700;
-        }
-
-        .patient-profile-error {
-          max-width: 700px;
-          margin: 80px auto;
-          padding: 30px;
-          background: #fffdf9;
-          border: 1px solid #e8e1d5;
-          border-radius: 20px;
-          text-align: center;
-        }
-
-        .patient-profile-error h2 {
-          margin: 0 0 10px;
-        }
-
-        .patient-profile-error p {
-          margin: 0;
-          color: #a05a45;
-          line-height: 1.6;
-        }
-
-        .patient-profile-submit {
-          min-width: 190px;
-          border: none;
-          border-radius: 12px;
-          background: #57765f;
-          color: #ffffff;
-          padding: 13px 18px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 700;
-        }
-
-        .patient-profile-submit:disabled {
-          opacity: 0.65;
-          cursor: not-allowed;
-        }
-
-        @media (max-width: 700px) {
-          .patient-profile-page {
-            padding: 75px 16px 30px;
-          }
-
-          .patient-profile-title {
-            font-size: 34px;
-          }
-
-          .patient-profile-subtitle {
-            font-size: 16px;
-          }
-
-          .patient-profile-card {
-            padding: 20px;
-            border-radius: 18px;
-          }
-
-          .patient-profile-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .patient-profile-field.full {
-            grid-column: auto;
-          }
-
-          .patient-profile-save-row {
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .patient-profile-submit {
-            width: 100%;
-          }
-        }
-      `}</style>
-
-      <div className="patient-profile-page">
-        <div className="patient-profile-container">
-          <div className="patient-profile-header">
-            <p className="patient-profile-label">
-              SMRITI AI · PATIENT PERSONALIZATION
-            </p>
-
-            <h1 className="patient-profile-title">
-              Personalize the care experience.
-            </h1>
-
-            <p className="patient-profile-subtitle">
-              Save the things that make this person feel familiar,
-              comfortable, and understood. These preferences can
-              later guide the app's visuals, activities, and comfort
-              experience.
-            </p>
-          </div>
-
-          <form
-            className="patient-profile-card"
-            onSubmit={handleSubmit}
-          >
-            <section className="patient-profile-section">
-              <h2 className="patient-profile-section-title">
+        <Card className="animate-fade-up p-6 sm:p-8">
+          <form onSubmit={handleSubmit}>
+            <section className="mb-7">
+              <h2 className="mb-1.5 text-xl text-foreground">
                 Patient Details
               </h2>
 
-              <p className="patient-profile-section-description">
+              <p className="mb-4 text-sm leading-relaxed text-faint">
                 Basic information used throughout Smriti AI.
               </p>
 
-              <div className="patient-profile-grid">
-                <div className="patient-profile-field">
-                  <label htmlFor="full_name">
-                    Patient Name
-                  </label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="full_name">Patient Name</Label>
 
-                  <input
+                  <Input
                     id="full_name"
                     name="full_name"
                     type="text"
@@ -518,12 +288,10 @@ function PatientProfile() {
                   />
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="age">
-                    Age
-                  </label>
+                <div>
+                  <Label htmlFor="age">Age</Label>
 
-                  <input
+                  <Input
                     id="age"
                     name="age"
                     type="number"
@@ -534,27 +302,30 @@ function PatientProfile() {
                   />
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="language">
-                    Preferred Language
-                  </label>
+                <div>
+                  <Label htmlFor="language">Preferred Language</Label>
 
-                  <input
+                  <select
                     id="language"
                     name="language"
-                    type="text"
-                    placeholder="e.g. Hindi"
+                    className={selectClassName}
                     value={form.language}
                     onChange={handleChange}
-                  />
+                  >
+                    <option value="">Select a language</option>
+
+                    {LANGUAGE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="caregiver_name">
-                    Caregiver
-                  </label>
+                <div>
+                  <Label htmlFor="caregiver_name">Caregiver</Label>
 
-                  <input
+                  <Input
                     id="caregiver_name"
                     name="caregiver_name"
                     type="text"
@@ -565,68 +336,40 @@ function PatientProfile() {
               </div>
             </section>
 
-            <section className="patient-profile-section">
-              <h2 className="patient-profile-section-title">
+            <section className="mb-7">
+              <h2 className="mb-1.5 text-xl text-foreground">
                 Personal Preferences
               </h2>
 
-              <p className="patient-profile-section-description">
+              <p className="mb-4 text-sm leading-relaxed text-faint">
                 These details help Smriti AI make the experience
                 feel more personal and familiar.
               </p>
 
-              <div className="patient-profile-grid">
-                <div className="patient-profile-field">
-                  <label htmlFor="favorite_color">
-                    Favorite Color
-                  </label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="favorite_color">Favorite Color</Label>
 
-                  <input
+                  <Input
                     id="favorite_color"
                     name="favorite_color"
                     type="text"
                     placeholder="e.g. Blue"
                     value={form.favorite_color}
                     onChange={handleChange}
-                    style={{
-                      borderColor: form.favorite_color
-                        ? resolveFavoriteColor(
-                            form.favorite_color
-                          )
-                        : undefined,
-                    }}
                   />
 
-                  <div className="patient-profile-color-preview">
-                    <div
-                      className="patient-profile-color-swatch"
-                      style={{
-                        background:
-                          resolveFavoriteColor(
-                            form.favorite_color
-                          ),
-                      }}
-                    />
-
-                    <div className="patient-profile-color-preview-text">
-                      <p className="patient-profile-color-preview-label">
-                        Color preview
-                      </p>
-
-                      <p className="patient-profile-color-preview-value">
-                        {form.favorite_color.trim() ||
-                          "No favorite color selected yet"}
-                      </p>
-                    </div>
-                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-faint">
+                    The app&apos;s colors update automatically as you
+                    type — try Blue, Green, Purple, Pink, Orange,
+                    Yellow, Red, Teal, or Brown.
+                  </p>
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="favorite_animal">
-                    Favorite Animal
-                  </label>
+                <div>
+                  <Label htmlFor="favorite_animal">Favorite Animal</Label>
 
-                  <input
+                  <Input
                     id="favorite_animal"
                     name="favorite_animal"
                     type="text"
@@ -636,12 +379,12 @@ function PatientProfile() {
                   />
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="favorite_activity">
+                <div>
+                  <Label htmlFor="favorite_activity">
                     Favorite Activity
-                  </label>
+                  </Label>
 
-                  <input
+                  <Input
                     id="favorite_activity"
                     name="favorite_activity"
                     type="text"
@@ -651,12 +394,10 @@ function PatientProfile() {
                   />
                 </div>
 
-                <div className="patient-profile-field">
-                  <label htmlFor="favorite_food">
-                    Favorite Food
-                  </label>
+                <div>
+                  <Label htmlFor="favorite_food">Favorite Food</Label>
 
-                  <input
+                  <Input
                     id="favorite_food"
                     name="favorite_food"
                     type="text"
@@ -666,12 +407,10 @@ function PatientProfile() {
                   />
                 </div>
 
-                <div className="patient-profile-field full">
-                  <label htmlFor="favorite_place">
-                    Favorite Place
-                  </label>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="favorite_place">Favorite Place</Label>
 
-                  <input
+                  <Input
                     id="favorite_place"
                     name="favorite_place"
                     type="text"
@@ -683,23 +422,21 @@ function PatientProfile() {
               </div>
             </section>
 
-            <section className="patient-profile-section">
-              <h2 className="patient-profile-section-title">
+            <section>
+              <h2 className="mb-1.5 text-xl text-foreground">
                 Comfort Memory
               </h2>
 
-              <p className="patient-profile-section-description">
+              <p className="mb-4 text-sm leading-relaxed text-faint">
                 Save a short, familiar memory that can later be
                 used to help calm and re-engage the patient after
                 repeated difficulty.
               </p>
 
-              <div className="patient-profile-field">
-                <label htmlFor="comfort_memory">
-                  Familiar Memory
-                </label>
+              <div className="mb-4">
+                <Label htmlFor="comfort_memory">Familiar Memory</Label>
 
-                <textarea
+                <Textarea
                   id="comfort_memory"
                   name="comfort_memory"
                   placeholder="e.g. Family Wedding — a beautiful day with the whole family in Jaipur."
@@ -707,44 +444,63 @@ function PatientProfile() {
                   onChange={handleChange}
                 />
 
-                <p className="patient-profile-help">
+                <p className="mt-2 text-xs leading-relaxed text-faint">
                   Keep this warm, familiar, and easy to recognize.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="comfort_memory_id">
+                  Link to a saved memory (optional)
+                </Label>
+
+                <select
+                  id="comfort_memory_id"
+                  name="comfort_memory_id"
+                  className={selectClassName}
+                  value={form.comfort_memory_id}
+                  onChange={handleChange}
+                >
+                  <option value="">No linked memory</option>
+
+                  {memories.map((memory) => (
+                    <option key={memory.id} value={memory.id}>
+                      {memory.title}
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-2 text-xs leading-relaxed text-faint">
+                  When a memory is linked, its photo and recording (if
+                  any) can be shown too, not just this description.
                 </p>
               </div>
             </section>
 
             {error && (
-              <p
-                style={{
-                  margin: "20px 0 0",
-                  color: "#a05a45",
-                  fontWeight: "700",
-                  lineHeight: 1.5,
-                }}
-              >
+              <Alert variant="destructive" className="mt-5">
                 {error}
-              </p>
+              </Alert>
             )}
 
-            <div className="patient-profile-save-row">
-              <div className="patient-profile-message">
-                {message}
+            <div className="mt-7 flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                {message && <Alert variant="success">{message}</Alert>}
               </div>
 
-              <button
-                className="patient-profile-submit"
+              <Button
                 type="submit"
+                size="lg"
                 disabled={saving}
+                className="min-w-[190px] sm:ml-auto"
               >
-                {saving
-                  ? "Saving..."
-                  : "Save Patient Preferences"}
-              </button>
+                {saving ? "Saving..." : "Save Patient Preferences"}
+              </Button>
             </div>
           </form>
-        </div>
+        </Card>
       </div>
-    </>
+    </div>
   );
 }
 
